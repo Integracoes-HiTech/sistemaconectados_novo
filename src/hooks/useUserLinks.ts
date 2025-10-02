@@ -130,9 +130,8 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         // Erro ao buscar configuração de tipo de links, usando padrão
       }
 
-      // IMPORTANTE: Links novos SEMPRE começam como 'members' por padrão
-      // Administradores podem alterar o tipo global posteriormente em Settings
-      const linkType = 'members'
+      // Usar o tipo de link configurado no sistema (default: 'members')
+      const linkType = settingsData?.setting_value || 'members'
       
       // Buscar campanha do usuário que está criando o link
       const { data: userData, error: userError } = await supabase

@@ -129,7 +129,7 @@ export default function Dashboard() {
       if (result.success) {
         toast({
           title: "Membro excluído",
-          description: `O membro "${memberName}" foi excluído com sucesso. Os amigos cadastrados por ele permanecem ativos no sistema.`,
+          description: `O membro "${memberName}" foi excluído com sucesso.`,
         });
       } else {
         throw new Error(result.error || 'Erro desconhecido');
@@ -525,27 +525,27 @@ export default function Dashboard() {
                       return;
                     }
 
-                    // Calcular Top 5 Membros com mais amigos para incluir no relatório
-                    let topMembersData: Array<{member: string, count: number, position: number}> = [];
-                    if (filteredFriends.length > 0) {
-                      // Contar amigos por membro (excluindo admin)
-                      const friendsByMember = filteredFriends.reduce((acc, friend) => {
-                        if (friend.member_name && friend.member_name.toLowerCase() !== 'admin') {
-                          acc[friend.member_name] = (acc[friend.member_name] || 0) + 1;
+                    // Calcular Top 5 Membros (usando dados reais da tabela members)
+                    const topMembersData = members
+                      .filter(member => 
+                        member.status === 'Ativo' && 
+                        !member.deleted_at && 
+                        member.name.toLowerCase() !== 'admin'
+                      )
+                      .sort((a, b) => {
+                        // Primeiro: mais contratos
+                        if (b.contracts_completed !== a.contracts_completed) {
+                          return b.contracts_completed - a.contracts_completed;
                         }
-                        return acc;
-                      }, {} as Record<string, number>);
-
-                      // Criar Top 5 dos membros com mais amigos
-                      topMembersData = Object.entries(friendsByMember)
-                        .sort(([, a], [, b]) => b - a)
-                        .slice(0, 5)
-                        .map(([member, count], index) => ({ 
-                          position: index + 1, 
-                          member, 
-                          count 
-                        }));
-                    }
+                        // Empate: membro mais antigo primeiro
+                        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                      })
+                      .slice(0, 5)
+                      .map((member, index) => ({ 
+                        position: index + 1, 
+                        member: member.name, 
+                        count: member.contracts_completed 
+                      }));
 
                     exportReportDataToPDF(reportData as unknown as Record<string, unknown>, memberStats as unknown as Record<string, unknown>, topMembersData);
                     toast({
@@ -890,27 +890,31 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredFriends.length > 0 ? (
+              {members.length > 0 ? (
                 (() => {
-                  // Contar amigos por membro (excluindo admin)
-                  const friendsByMember = filteredFriends.reduce((acc, friend) => {
-                    if (friend.member_name && friend.member_name.toLowerCase() !== 'admin') {
-                      acc[friend.member_name] = (acc[friend.member_name] || 0) + 1;
-                    }
-                    return acc;
-                  }, {} as Record<string, number>);
-
-                  // Criar Top 5 dos membros com mais amigos
-                  const topMembers = Object.entries(friendsByMember)
-                    .sort(([, a], [, b]) => b - a)
+                  // Usar dados reais da tabela members (não amigos órfãos)
+                  const activeMembers = members
+                    .filter(member => 
+                      member.status === 'Ativo' && 
+                      !member.deleted_at && 
+                      member.name.toLowerCase() !== 'admin'
+                    )
+                    .sort((a, b) => {
+                      // Primeiro: mais contratos
+                      if (b.contracts_completed !== a.contracts_completed) {
+                        return b.contracts_completed - a.contracts_completed;
+                      }
+                      // Empate: membro mais antigo primeiro
+                      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                    })
                     .slice(0, 5)
-                    .map(([member, count], index) => ({ 
+                    .map((member, index) => ({ 
                       position: index + 1, 
-                      member, 
-                      count 
+                      member: member.name, 
+                      count: member.contracts_completed 
                     }));
 
-                  if (topMembers.length === 0) {
+                  if (activeMembers.length === 0) {
                     return (
                       <div className="flex items-center justify-center h-[300px] text-muted-foreground">
                         <div className="text-center">
@@ -923,7 +927,7 @@ export default function Dashboard() {
 
                   return (
                     <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                      {topMembers.map((item) => (
+                      {activeMembers.map((item) => (
                         <div 
                           key={item.member} 
                           className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors"

@@ -406,7 +406,7 @@ export const useMembers = (referrer?: string, campaign?: string) => {
       console.log('✅ Membro excluído na tabela members');
 
       // 2. NÃO excluir amigos relacionados - excluir apenas o membro
-      console.log('⚠️ Exclusão de membro SEM cascata - amigos permanecem ativos');
+      console.log('⚠️ Exclusão de membro SEM cascata - ');
 
       // 3. Buscar auth_users correspondente e excluir links
       const { data: authUsers, error: authSearchError } = await supabase
