@@ -133,7 +133,7 @@ export const useSystemSettings = () => {
     } catch (err) {
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao atualizar configuração' 
+        error: err instanceof Error ? err.message : 'Problema ao atualizar configuração' 
       }
     }
   }
@@ -157,7 +157,7 @@ export const useSystemSettings = () => {
     } catch (err) {
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao atualizar fase' 
+        error: err instanceof Error ? err.message : 'Não foi possivel atualizar fase' 
       }
     }
   }
@@ -213,7 +213,7 @@ export const useSystemSettings = () => {
     }
   }
 
-  const updateMemberLinksType = async (linkType: 'members' | 'friends') => {
+  const updateMemberLinksType = async (linkType: 'members' | 'friends', userCampaign?: string) => {
     try {
       // NOVA VERSÃO DA FUNÇÃO updateMemberLinksType INICIADA
       // updateMemberLinksType chamada
@@ -251,28 +251,34 @@ export const useSystemSettings = () => {
 
       // Configuração do sistema atualizada
 
-      // Buscar UUID do usuário
-      // Buscando UUID do usuário
-      const { data: adminUser, error: adminError } = await supabase
+      // Buscar todos os administradores para excluir da atualização
+      // Buscando todos os administradores
+      const { data: adminUsers, error: adminError } = await supabase
         .from('auth_users')
-        .select('id, username, full_name')
-        .eq('username', 'admin')
-        .single();
+        .select('id, username, full_name, role')
+        .or('role.eq.Administrador,role.eq.admin,username.eq.wegneycosta,username.eq.felipe,username.eq.admin_b');
 
       if (adminError) {
-        // Erro ao buscar usuário
+        // Erro ao buscar administradores
         throw adminError;
       }
 
-      const adminId = adminUser?.id;
-      // Usuário encontrado
+      const adminIds = adminUsers?.map(admin => admin.id) || [];
+      // Administradores encontrados
 
-      // 4. Verificar links existentes antes de atualizar
+      // 4. Verificar links existentes antes de atualizar (filtrar por campanha se especificada)
       // Verificando links existentes
-      const { data: existingLinks, error: linksFetchError } = await supabase
+      let existingLinksQuery = supabase
         .from('user_links')
-        .select('id, user_id, link_type')
-        .neq('user_id', adminId);
+        .select('id, user_id, link_type, campaign')
+        .not('user_id', 'in', `(${adminIds.join(',')})`);
+
+      // Se campanha do usuário foi especificada, filtrar apenas essa campanha
+      if (userCampaign) {
+        existingLinksQuery = existingLinksQuery.eq('campaign', userCampaign);
+      }
+
+      const { data: existingLinks, error: linksFetchError } = await existingLinksQuery;
 
       if (linksFetchError) {
         // Erro ao buscar links existentes
@@ -286,14 +292,21 @@ export const useSystemSettings = () => {
       if (linkType === 'friends') {
         // Atualizando links existentes para friends
         
-        const { data: updateResult, error: linksError } = await supabase
+        let updateQuery = supabase
           .from('user_links')
           .update({ 
             link_type: 'friends',
             updated_at: new Date().toISOString()
           })
           .eq('link_type', 'members')
-          .neq('user_id', adminId) // Excluir usuário específico
+          .not('user_id', 'in', `(${adminIds.join(',')})`); // Excluir todos os administradores
+
+        // Se campanha do usuário foi especificada, filtrar apenas essa campanha
+        if (userCampaign) {
+          updateQuery = updateQuery.eq('campaign', userCampaign);
+        }
+
+        const { data: updateResult, error: linksError } = await updateQuery
           .select('id, user_id, link_type');
 
         if (linksError) {
@@ -309,14 +322,21 @@ export const useSystemSettings = () => {
       if (linkType === 'members') {
         // Atualizando links existentes para members (exceto admin)
         
-        const { data: updateResult, error: linksError } = await supabase
+        let updateQuery = supabase
           .from('user_links')
           .update({ 
             link_type: 'members',
             updated_at: new Date().toISOString()
           })
           .eq('link_type', 'friends')
-          .neq('user_id', adminId) // Excluir usuário específico
+          .not('user_id', 'in', `(${adminIds.join(',')})`); // Excluir todos os administradores
+
+        // Se campanha do usuário foi especificada, filtrar apenas essa campanha
+        if (userCampaign) {
+          updateQuery = updateQuery.eq('campaign', userCampaign);
+        }
+
+        const { data: updateResult, error: linksError } = await updateQuery
           .select('id, user_id, link_type');
 
         if (linksError) {
@@ -330,10 +350,17 @@ export const useSystemSettings = () => {
       
       // 7. Verificar resultado final
       // Verificando resultado final
-      const { data: finalLinks, error: finalError } = await supabase
+      let finalLinksQuery = supabase
         .from('user_links')
-        .select('id, user_id, link_type')
-        .neq('user_id', adminId);
+        .select('id, user_id, link_type, campaign')
+        .not('user_id', 'in', `(${adminIds.join(',')})`);
+
+      // Se campanha do usuário foi especificada, filtrar apenas essa campanha
+      if (userCampaign) {
+        finalLinksQuery = finalLinksQuery.eq('campaign', userCampaign);
+      }
+
+      const { data: finalLinks, error: finalError } = await finalLinksQuery;
 
       if (finalError) {
         // Erro ao verificar resultado final
@@ -352,7 +379,7 @@ export const useSystemSettings = () => {
       // Erro geral no updateMemberLinksType
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao atualizar tipo de links' 
+        error: err instanceof Error ? err.message : 'Não foi possivel atualizar tipo de links' 
       }
     }
   }

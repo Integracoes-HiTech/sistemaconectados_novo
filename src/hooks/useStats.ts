@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, Stats } from '@/lib/supabase'
 
-export const useStats = (referrer?: string) => {
+export const useStats = (referrer?: string, campaign?: string) => {
   const [stats, setStats] = useState<Stats>({
     total_users: 0,
     active_users: 0,
@@ -24,7 +24,7 @@ export const useStats = (referrer?: string) => {
     })
     setError(null)
     fetchStats()
-  }, [referrer])
+  }, [referrer, campaign])
 
   const fetchStats = async () => {
     try {
@@ -36,6 +36,10 @@ export const useStats = (referrer?: string) => {
       
       if (referrer) {
         query = query.eq('referrer', referrer)
+      }
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign)
       }
 
       const { data: users, error } = await query

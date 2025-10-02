@@ -1,149 +1,216 @@
--- ATUALIZAR TABELA USER_LINKS
--- Script para atualizar todos os links existentes baseado na configuração do sistema
+-- =====================================================
+-- ATUALIZAR TABELA USER_LINKS PARA SUPORTAR LINKS ESPECÍFICOS
+-- Execute este script no SQL Editor do Supabase
+-- =====================================================
 
--- 1. VERIFICAR CONFIGURAÇÃO ATUAL DO SISTEMA
-SELECT 
-    'CONFIGURAÇÃO ATUAL' as tipo,
-    setting_value as tipo_links_atual
-FROM system_settings 
-WHERE setting_key = 'member_links_type';
+-- =====================================================
+-- 1. ADICIONAR COLUNA PARA TIPO DE LINK ESPECÍFICO
+-- =====================================================
 
--- 2. VERIFICAR ESTADO ATUAL DOS LINKS
+-- Adicionar coluna para identificar o tipo de link específico
+ALTER TABLE user_links ADD COLUMN IF NOT EXISTS link_specific_type VARCHAR(20) DEFAULT 'normal' CHECK (link_specific_type IN ('normal', 'saude', '20'));
+
+-- Adicionar coluna para descrição específica
+ALTER TABLE user_links ADD COLUMN IF NOT EXISTS specific_description TEXT;
+
+-- =====================================================
+-- 2. CRIAR ÍNDICES PARA PERFORMANCE
+-- =====================================================
+
+-- Índice para o tipo específico de link
+CREATE INDEX IF NOT EXISTS idx_user_links_specific_type ON user_links(link_specific_type);
+
+-- Índice composto para busca eficiente
+CREATE INDEX IF NOT EXISTS idx_user_links_type_specific ON user_links(link_type, link_specific_type);
+
+-- =====================================================
+-- 3. ATUALIZAR DADOS EXISTENTES
+-- =====================================================
+
+-- Marcar todos os links existentes como 'normal'
+UPDATE user_links SET link_specific_type = 'normal' WHERE link_specific_type IS NULL;
+
+-- =====================================================
+-- 4. CRIAR VIEWS PARA ESTATÍSTICAS ESPECÍFICAS
+-- =====================================================
+
+-- View para estatísticas de links de saúde
+CREATE OR REPLACE VIEW v_user_links_saude_stats AS
 SELECT 
-    'ESTADO ATUAL DOS LINKS' as tipo,
-    link_type,
-    COUNT(*) as quantidade
+  campaign,
+  created_by,
+  COUNT(*) as total_links,
+  COUNT(CASE WHEN is_active = true THEN 1 END) as active_links,
+  COUNT(CASE WHEN is_active = false THEN 1 END) as inactive_links,
+  SUM(current_uses) as total_uses,
+  COUNT(CASE WHEN link_type = 'Membro' THEN 1 END) as member_links,
+  COUNT(CASE WHEN link_type = 'Amigo' THEN 1 END) as friend_links
 FROM user_links 
-GROUP BY link_type
-ORDER BY link_type;
+WHERE link_specific_type = 'saude' AND deleted_at IS NULL
+GROUP BY campaign, created_by;
 
--- 3. BUSCAR UUID DO ADMIN
+-- View para estatísticas de links de 20
+CREATE OR REPLACE VIEW v_user_links_20_stats AS
 SELECT 
-    'UUID DO ADMIN' as tipo,
-    id as admin_uuid,
-    username,
-    full_name
-FROM auth_users 
-WHERE username = 'admin' OR full_name ILIKE '%admin%'
-LIMIT 1;
-
--- 4. VERIFICAR LINKS DO ADMIN (NÃO DEVEM SER ALTERADOS)
--- Substitua 'ADMIN_UUID_AQUI' pelo UUID real do admin
-SELECT 
-    'LINKS DO ADMIN' as tipo,
-    user_id,
-    link_type,
-    COUNT(*) as quantidade
+  campaign,
+  created_by,
+  COUNT(*) as total_links,
+  COUNT(CASE WHEN is_active = true THEN 1 END) as active_links,
+  COUNT(CASE WHEN is_active = false THEN 1 END) as inactive_links,
+  SUM(current_uses) as total_uses,
+  COUNT(CASE WHEN link_type = 'Membro' THEN 1 END) as member_links,
+  COUNT(CASE WHEN link_type = 'Amigo' THEN 1 END) as friend_links
 FROM user_links 
-WHERE user_id = (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1)
-GROUP BY user_id, link_type;
+WHERE link_specific_type = '20' AND deleted_at IS NULL
+GROUP BY campaign, created_by;
 
--- 5. ATUALIZAR LINKS PARA 'FRIENDS' (EXCETO ADMIN)
--- Execute apenas se a configuração for 'friends'
-UPDATE user_links 
-SET 
-    link_type = 'friends',
-    updated_at = NOW()
-WHERE 
-    link_type = 'members' 
-    AND user_id != (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1);
-
--- 6. ATUALIZAR LINKS PARA 'MEMBERS' (EXCETO ADMIN)
--- Execute apenas se a configuração for 'members'
-UPDATE user_links 
-SET 
-    link_type = 'members',
-    updated_at = NOW()
-WHERE 
-    link_type = 'friends' 
-    AND user_id != (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1);
-
--- 6. VERIFICAR RESULTADO APÓS ATUALIZAÇÃO
+-- View para estatísticas de links normais
+CREATE OR REPLACE VIEW v_user_links_normal_stats AS
 SELECT 
-    'RESULTADO APÓS ATUALIZAÇÃO' as tipo,
-    link_type,
-    COUNT(*) as quantidade
+  campaign,
+  created_by,
+  COUNT(*) as total_links,
+  COUNT(CASE WHEN is_active = true THEN 1 END) as active_links,
+  COUNT(CASE WHEN is_active = false THEN 1 END) as inactive_links,
+  SUM(current_uses) as total_uses,
+  COUNT(CASE WHEN link_type = 'Membro' THEN 1 END) as member_links,
+  COUNT(CASE WHEN link_type = 'Amigo' THEN 1 END) as friend_links
 FROM user_links 
-GROUP BY link_type
-ORDER BY link_type;
+WHERE link_specific_type = 'normal' AND deleted_at IS NULL
+GROUP BY campaign, created_by;
 
--- 7. VERIFICAR SE ADMIN PERMANECEU COMO 'MEMBERS'
-SELECT 
-    'ADMIN APÓS ATUALIZAÇÃO' as tipo,
-    user_id,
-    link_type,
-    COUNT(*) as quantidade
-FROM user_links 
-WHERE user_id = (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1)
-GROUP BY user_id, link_type;
+-- =====================================================
+-- 5. CRIAR FUNÇÕES AUXILIARES
+-- =====================================================
 
--- 8. RESUMO GERAL
-SELECT 
-    'RESUMO GERAL' as tipo,
-    COUNT(*) as total_links,
-    COUNT(CASE WHEN link_type = 'members' THEN 1 END) as links_members,
-    COUNT(CASE WHEN link_type = 'friends' THEN 1 END) as links_friends,
-    COUNT(CASE WHEN user_id = 'admin' THEN 1 END) as links_admin
-FROM user_links;
-
--- 9. SCRIPT AUTOMÁTICO BASEADO NA CONFIGURAÇÃO
--- Este script atualiza automaticamente baseado na configuração atual
-DO $$
+-- Função para gerar código de link único
+CREATE OR REPLACE FUNCTION generate_unique_link_code()
+RETURNS text AS $$
 DECLARE
-    current_setting TEXT;
-    updated_count INTEGER;
+    new_code text;
+    exists boolean;
 BEGIN
-    -- Buscar configuração atual
-    SELECT setting_value INTO current_setting
-    FROM system_settings 
-    WHERE setting_key = 'member_links_type';
-    
-    RAISE NOTICE 'Configuração atual: %', current_setting;
-    
-    -- Atualizar baseado na configuração
-    IF current_setting = 'friends' THEN
-        -- Atualizar todos os links 'members' para 'friends' (exceto admin)
-        UPDATE user_links 
-        SET 
-            link_type = 'friends',
-            updated_at = NOW()
-        WHERE 
-            link_type = 'members' 
-            AND user_id != (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1);
+    LOOP
+        -- Gerar código aleatório de 8 caracteres
+        new_code := upper(substring(md5(random()::text) from 1 for 8));
         
-        GET DIAGNOSTICS updated_count = ROW_COUNT;
-        RAISE NOTICE 'Atualizados % links para FRIENDS (exceto admin)', updated_count;
+        -- Verificar se já existe
+        SELECT EXISTS(SELECT 1 FROM user_links WHERE link_code = new_code) INTO exists;
         
-    ELSIF current_setting = 'members' THEN
-        -- Atualizar todos os links 'friends' para 'members' (exceto admin)
-        UPDATE user_links 
-        SET 
-            link_type = 'members',
-            updated_at = NOW()
-        WHERE 
-            link_type = 'friends' 
-            AND user_id != (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1);
-        
-        GET DIAGNOSTICS updated_count = ROW_COUNT;
-        RAISE NOTICE 'Atualizados % links para MEMBERS (exceto admin)', updated_count;
-        
-    ELSE
-        RAISE NOTICE 'Configuração não reconhecida: %', current_setting;
-    END IF;
-    
-    -- Verificar resultado
-    RAISE NOTICE 'Links atualizados com sucesso!';
-END $$;
+        -- Se não existe, retornar o código
+        IF NOT exists THEN
+            RETURN new_code;
+        END IF;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 
--- 10. VERIFICAÇÃO FINAL
+-- =====================================================
+-- 6. INSERIR LINKS DE EXEMPLO
+-- =====================================================
+
+-- Inserir links de exemplo para adminsaude
+INSERT INTO user_links (
+    user_id, link_code, link_type, created_by, description, 
+    link_specific_type, specific_description, campaign
+) VALUES (
+    (SELECT id FROM auth_users WHERE username = 'adminsaude' LIMIT 1),
+    generate_unique_link_code(),
+    'Membro',
+    'adminsaude',
+    'Link de cadastro para membros individuais',
+    'saude',
+    'Link específico para cadastro de membros individuais (sem duplas)',
+    'A'
+) ON CONFLICT DO NOTHING;
+
+-- Inserir links de exemplo para admin20
+INSERT INTO user_links (
+    user_id, link_code, link_type, created_by, description, 
+    link_specific_type, specific_description, campaign
+) VALUES (
+    (SELECT id FROM auth_users WHERE username = 'admin20' LIMIT 1),
+    generate_unique_link_code(),
+    'Membro',
+    'admin20',
+    'Link de cadastro para duplas sem Instagram',
+    '20',
+    'Link específico para cadastro de duplas sem Instagram',
+    'A'
+) ON CONFLICT DO NOTHING;
+
+-- =====================================================
+-- 7. VERIFICAR IMPLEMENTAÇÃO
+-- =====================================================
+
+-- Verificar se a coluna foi adicionada
 SELECT 
-    'VERIFICAÇÃO FINAL' as tipo,
+    column_name,
+    data_type,
+    column_default,
+    is_nullable
+FROM information_schema.columns 
+WHERE table_name = 'user_links' AND column_name = 'link_specific_type';
+
+-- Verificar links criados
+SELECT 
+    link_code,
+    created_by,
     link_type,
-    COUNT(*) as quantidade,
-    CASE 
-        WHEN user_id = (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1) THEN 'ADMIN'
-        ELSE 'MEMBROS'
-    END as tipo_usuario
+    link_specific_type,
+    specific_description,
+    is_active
 FROM user_links 
-GROUP BY link_type, CASE WHEN user_id = (SELECT id FROM auth_users WHERE username = 'admin' LIMIT 1) THEN 'ADMIN' ELSE 'MEMBROS' END
-ORDER BY link_type, tipo_usuario;
+WHERE created_by IN ('adminsaude', 'admin20')
+ORDER BY created_by, link_specific_type;
+
+-- Verificar estatísticas
+SELECT 
+    'saude' as tipo,
+    COUNT(*) as total_links
+FROM user_links 
+WHERE link_specific_type = 'saude' AND deleted_at IS NULL
+UNION ALL
+SELECT 
+    '20' as tipo,
+    COUNT(*) as total_links
+FROM user_links 
+WHERE link_specific_type = '20' AND deleted_at IS NULL
+UNION ALL
+SELECT 
+    'normal' as tipo,
+    COUNT(*) as total_links
+FROM user_links 
+WHERE link_specific_type = 'normal' AND deleted_at IS NULL;
+
+-- =====================================================
+-- 8. COMENTÁRIOS E DOCUMENTAÇÃO
+-- =====================================================
+
+COMMENT ON COLUMN user_links.link_specific_type IS 'Tipo específico do link: normal, saude, 20';
+COMMENT ON COLUMN user_links.specific_description IS 'Descrição específica do tipo de link';
+
+-- =====================================================
+-- SCRIPT CONCLUÍDO
+-- =====================================================
+-- 
+-- MODIFICAÇÕES:
+-- - Adicionada coluna link_specific_type na tabela user_links
+-- - Adicionada coluna specific_description na tabela user_links
+-- - Criados índices para performance
+-- - Criadas views de estatísticas específicas
+-- - Criada função para gerar códigos únicos
+-- - Inseridos links de exemplo
+-- 
+-- VANTAGENS:
+-- - Reutiliza tabela existente
+-- - Mantém compatibilidade com links normais
+-- - Facilita manutenção
+-- - Reduz complexidade
+-- 
+-- PRÓXIMOS PASSOS:
+-- 1. Atualizar hooks para usar a tabela user_links
+-- 2. Modificar lógica de geração de links
+-- 3. Atualizar dashboard
+-- 4. Testar funcionalidades
+-- =====================================================

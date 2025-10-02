@@ -170,7 +170,7 @@ export const usePaidContracts = (memberId?: string) => {
     } catch (err) {
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao atualizar contrato' 
+        error: err instanceof Error ? err.message : 'Não foi possivel atualizar contrato' 
       }
     }
   }

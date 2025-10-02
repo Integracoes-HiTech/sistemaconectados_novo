@@ -55,11 +55,11 @@ export default function Settings() {
 
           if (insertError) throw insertError;
           
-          console.log('✅ Configuração inicial criada');
+        
           await refetch();
         }
       } catch (err) {
-        console.error('❌ Erro ao criar configuração inicial:', err);
+        console.error('', err);
       }
     };
 
@@ -80,27 +80,25 @@ export default function Settings() {
 
     try {
       setIsUpdating(true);
-      console.log('🔍 Settings: Alterando tipo de links para:', linkType);
-      console.log('🔍 Settings: Tipo recebido:', typeof linkType, linkType);
-      console.log('🔍 Settings: Configuração atual:', settings?.member_links_type);
+     
       
-      const result = await updateMemberLinksType(linkType);
+      const result = await updateMemberLinksType(linkType, user?.campaign);
       
-      console.log('🔍 Settings: Resultado da função:', result);
+     
       
       if (result.success) {
         toast({
           title: "Configuração atualizada!",
-          description: `Tipo de links alterado para: ${linkType === 'members' ? 'Novos Membros' : 'Amigos'}. Links existentes também foram atualizados (exceto admin).`,
+          description: `Tipo de links alterado para: ${linkType === 'members' ? 'Novos Membros' : 'Amigos'}. Links existentes também foram atualizados`,
         });
-        console.log('✅ Settings: Tipo de links atualizado com sucesso');
+     
       } else {
         toast({
-          title: "Erro ao atualizar",
+          title: "Problema ao atualizar links",
           description: result.error || "Não foi possível alterar o tipo de links",
           variant: "destructive",
         });
-        console.error('❌ Settings: Erro ao atualizar tipo de links:', result.error);
+     
       }
     } catch (err) {
       toast({
@@ -108,7 +106,7 @@ export default function Settings() {
         description: "Ocorreu um erro inesperado",
         variant: "destructive",
       });
-      console.error('❌ Settings: Erro inesperado:', err);
+    
     } finally {
       setIsUpdating(false);
     }
@@ -336,7 +334,7 @@ export default function Settings() {
                     <div className="text-sm text-blue-600">
                       {settings?.paid_contracts_phase_active 
                         ? '.Fase de amigos ativa'
-                        : 'Cada membro poderá cadastrar até 15 duplas pagas quando ativada'
+                        : 'Cada membro poderá cadastrar 15 duplas de amigos quando ativada'
                       }
                     </div>
                   </div>

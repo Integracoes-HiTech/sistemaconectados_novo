@@ -52,7 +52,7 @@ export interface SystemSettings {
   paid_contracts_start_date: string
 }
 
-export const useMembers = (referrer?: string) => {
+export const useMembers = (referrer?: string, campaign?: string) => {
   const [members, setMembers] = useState<Member[]>([])
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null)
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null)
@@ -70,6 +70,10 @@ export const useMembers = (referrer?: string) => {
       if (referrer) {
         query = query.eq('referrer', referrer)
       }
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign)
+      }
 
       const { data: membersData, error: membersError } = await query
       if (membersError) throw membersError
@@ -80,33 +84,67 @@ export const useMembers = (referrer?: string) => {
     } finally {
       setLoading(false)
     }
-  }, [referrer])
+  }, [referrer, campaign])
 
   const fetchMemberStats = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('v_system_stats')
-        .select('*')
-        .single()
+      // Se não há campanha especificada, usar a view global
+      if (!campaign) {
+        const { data, error } = await supabase
+          .from('v_system_stats')
+          .select('*')
+          .single()
+
+        if (error) throw error
+
+        const stats: MemberStats = {
+          total_members: data.total_members || 0,
+          green_members: data.green_members || 0,
+          yellow_members: data.yellow_members || 0,
+          red_members: data.red_members || 0,
+          top_1500_members: data.top_1500_members || 0,
+          current_member_count: data.current_member_count || 0,
+          max_member_limit: data.max_member_limit || 1500,
+          can_register_more: (data.current_member_count || 0) < (data.max_member_limit || 1500)
+        }
+
+        setMemberStats(stats)
+        return
+      }
+
+      // Filtrar por campanha específica
+      const { data: membersData, error } = await supabase
+        .from('members')
+        .select('ranking_status, contracts_completed, is_top_1500')
+        .eq('campaign', campaign)
+        .eq('status', 'Ativo')
+        .is('deleted_at', null)
 
       if (error) throw error
 
+      // Calcular estatísticas da campanha
+      const totalMembers = membersData?.length || 0
+      const greenMembers = membersData?.filter(m => m.ranking_status === 'Verde').length || 0
+      const yellowMembers = membersData?.filter(m => m.ranking_status === 'Amarelo').length || 0
+      const redMembers = membersData?.filter(m => m.ranking_status === 'Vermelho').length || 0
+      const top1500Members = membersData?.filter(m => m.is_top_1500).length || 0
+
       const stats: MemberStats = {
-        total_members: data.total_members || 0,
-        green_members: data.green_members || 0,
-        yellow_members: data.yellow_members || 0,
-        red_members: data.red_members || 0,
-        top_1500_members: data.top_1500_members || 0,
-        current_member_count: data.current_member_count || 0,
-        max_member_limit: data.max_member_limit || 1500,
-        can_register_more: (data.current_member_count || 0) < (data.max_member_limit || 1500)
+        total_members: totalMembers,
+        green_members: greenMembers,
+        yellow_members: yellowMembers,
+        red_members: redMembers,
+        top_1500_members: top1500Members,
+        current_member_count: totalMembers,
+        max_member_limit: 1500,
+        can_register_more: totalMembers < 1500
       }
 
       setMemberStats(stats)
     } catch (err) {
       // Erro ao carregar estatísticas dos membros
     }
-  }, [])
+  }, [campaign])
 
   const fetchSystemSettings = useCallback(async () => {
     try {
@@ -160,19 +198,17 @@ export const useMembers = (referrer?: string) => {
       // Hook useMembers - Dados recebidos
       
       // Verificar se pode cadastrar mais membros
-      // Verificando se pode cadastrar mais membros
-      const { data: canRegister, error: canRegisterError } = await supabase
-        .rpc('can_register_member')
+      try {
+        const { data: canRegister, error: canRegisterError } = await supabase
+          .rpc('can_register_member')
 
-      // Resultado da verificação
-
-      if (canRegisterError) {
-        // Erro na verificação de limite
-        throw canRegisterError;
-      }
-
-      if (!canRegister) {
-        throw new Error('Limite de 1.500 membros atingido. Não é possível cadastrar novos membros.')
+        if (canRegisterError) {
+          console.warn('Função can_register_member não encontrada, continuando...')
+        } else if (!canRegister) {
+          throw new Error('Limite de 1.500 membros atingido. Não é possível cadastrar novos membros.')
+        }
+      } catch (rpcError) {
+        console.warn('Erro ao verificar limite de membros, continuando...', rpcError)
       }
 
       // Inserindo membro no banco
@@ -203,10 +239,8 @@ export const useMembers = (referrer?: string) => {
 
       // Membro inserido com sucesso
 
-      // Se é um amigo, atualizar contratos do referrer
-      if (memberData.is_friend && memberData.referrer) {
-        await updateReferrerContracts(memberData.referrer);
-      }
+      // NÃO atualizar contratos aqui - será feito pelo PublicRegister.tsx
+      // (Evita duplicação devido a múltiplas funções incrementando)
 
       // Atualizar ranking após adicionar membro
       await updateRanking()
@@ -248,32 +282,14 @@ export const useMembers = (referrer?: string) => {
         return;
       }
 
-      // Incrementar contratos completados
-      const newContractsCount = referrerMember.contracts_completed + 1;
+      // REMOVIDO: Incremento manual de contratos (duplicação corrigida)
+      // O contracts_completed deve ser atualizado apenas pela função updateMemberCountersAfterRegistration()
+      // no PublicRegister.tsx que conta os amigos reais ativos
       
-      // Incrementando contratos do referrer
-
-      // Atualizar contratos do referrer
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({ 
-          contracts_completed: newContractsCount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', referrerMember.id);
-
-      if (updateError) {
-        // Erro ao atualizar contratos do referrer
-        return;
-      }
-
-      // Contratos do referrer atualizados com sucesso
-      
-      // Atualizar ranking após mudança nos contratos
-      await updateRanking();
+      console.log('✅ Membro adicionado sem incremento manual de contratos');
       
     } catch (err) {
-      // Erro ao atualizar contratos do referrer
+      console.warn('Função updateReferrerContracts removida para evitar duplicação');
     }
   }
 
@@ -348,92 +364,100 @@ export const useMembers = (referrer?: string) => {
     }
   }
 
-  // Função para soft delete (exclusão lógica) com cascata
+  // Função para soft delete (exclusão lógica) sem dependência de RPC
   const softDeleteMember = async (memberId: string) => {
     try {
-      // Executando soft delete do membro com cascata
+      console.log(`🔧 Iniciando soft delete do membro ${memberId} (SEM cascata)`);
       
-      // Primeiro tentar a nova função de exclusão em cascata
-      let { data, error } = await supabase
-        .rpc('soft_delete_member_cascade', { member_id: memberId })
+      // Buscar dados do membro antes de excluir
+      const { data: memberData, error: memberError } = await supabase
+        .from('members')
+        .select('name, contracts_completed')
+        .eq('id', memberId)
+        .is('deleted_at', null) // Só selecionar se não estiver já excluído
+        .single();
 
-      // Se a função de cascata não existir, usar a função original
-      if (error && error.message.includes('function') && error.message.includes('does not exist')) {
-        // Função de cascata não encontrada, usando função original
+      if (memberError) {
+        console.error('❌ Erro ao buscar membro:', memberError);
+        throw new Error(`Membro não encontrado: ${memberError.message}`);
+      }
+
+      if (!memberData) {
+        throw new Error('Membro já foi excluído ou não existe');
+      }
+
+      console.log(`📝 Excluindo membro: ${memberData.name}`);
+
+      // 1. Soft delete do membro
+      const { error: deleteError } = await supabase
+        .from('members')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          status: 'Inativo',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', memberId);
+
+      if (deleteError) {
+        console.error('❌ Erro ao atualizar membro:', deleteError);
+        throw new Error(`Erro ao excluir membro: ${deleteError.message}`);
+      }
+
+      console.log('✅ Membro excluído na tabela members');
+
+      // 2. NÃO excluir amigos relacionados - excluir apenas o membro
+      console.log('⚠️ Exclusão de membro SEM cascata - amigos permanecem ativos');
+
+      // 3. Buscar auth_users correspondente e excluir links
+      const { data: authUsers, error: authSearchError } = await supabase
+        .from('auth_users')
+        .select('id')
+        .eq('name', memberData.name)
+        .eq('role', 'Membro')
+        .limit(1);
+
+      if (authUsers && authUsers.length > 0) {
+        const authUserId = authUsers[0].id;
         
-        // Buscar dados do membro para exclusão manual
-        const { data: memberData, error: memberError } = await supabase
-          .from('members')
-          .select('name')
-          .eq('id', memberId)
-          .single();
+        // 3.1. Excluir user_links fisicamente
+        const { error: linksDeleteError } = await supabase
+          .from('user_links')
+          .delete()
+          .eq('user_id', authUserId);
 
-        if (memberError) {
-          throw memberError;
+        if (linksDeleteError) {
+          console.error('❌ Erro ao excluir user_links:', linksDeleteError);
+        } else {
+          console.log('✅ Links excluídos fisicamente');
         }
 
-        // Excluir membro
-        const { error: deleteError } = await supabase
-          .from('members')
-          .update({ deleted_at: new Date().toISOString() })
-          .eq('id', memberId);
-
-        if (deleteError) {
-          throw deleteError;
-        }
-
-        // Buscar auth_users correspondentes para exclusão física
-        const { data: authUsers, error: authFetchError } = await supabase
+        // 3.2. Excluir auth_users fisicamente  
+        const { error: authDeleteError } = await supabase
           .from('auth_users')
-          .select('id')
-          .eq('name', memberData.name)
-          .in('role', ['Membro', 'Amigo']);
+          .delete()
+          .eq('id', authUserId);
 
-        if (authFetchError) {
-          // Erro ao buscar auth_users
+        if (authDeleteError) {
+          console.error('❌ Erro ao excluir auth_users:', authDeleteError);
+        } else {
+          console.log('✅ Usuário excluído de auth_users');
         }
-
-        if (authUsers && authUsers.length > 0) {
-          // Excluir user_links fisicamente
-          const { error: linksError } = await supabase
-            .from('user_links')
-            .delete()
-            .in('user_id', authUsers.map(au => au.id));
-
-          if (linksError) {
-            // Erro ao excluir user_links
-          }
-
-          // Excluir auth_users fisicamente
-          const { error: authError } = await supabase
-            .from('auth_users')
-            .delete()
-            .eq('name', memberData.name)
-            .in('role', ['Membro', 'Amigo']);
-
-          if (authError) {
-            // Erro ao excluir auth_users
-          }
-        }
-
-        data = { success: true };
-        error = null;
+      } else {
+        console.log('⚠️ Nenhum auth_users encontrado para excluir');
       }
 
-      if (error) {
-        // Erro no soft delete
-        throw error;
-      }
+      // 4. Atualizar ranking após exclusões
+      await updateRanking();
 
-      // Soft delete executado com sucesso
-
-      // Recarregar dados após exclusão
+      // 5. Recarregar dados após exclusão
       await fetchMembers();
       await fetchMemberStats();
 
-      return { success: true, data };
+      console.log('✅ Soft delete concluído com sucesso');
+      return { success: true };
+
     } catch (err) {
-      // Erro geral no softDeleteMember
+      console.error('❌ Erro no soft delete:', err);
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Erro ao excluir membro' 

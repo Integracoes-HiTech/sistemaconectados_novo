@@ -36,7 +36,7 @@ export interface Friend {
   updated_at: string
 }
 
-export const useFriends = () => {
+export const useFriends = (referrer?: string, campaign?: string) => {
   const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,12 +46,22 @@ export const useFriends = () => {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('friends')
         .select('*')
         .eq('status', 'Ativo')
         .is('deleted_at', null)
         .order('contracts_completed', { ascending: false })
+      
+      if (referrer) {
+        query = query.eq('referrer', referrer)
+      }
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign)
+      }
+      
+      const { data, error: fetchError } = await query
 
       if (fetchError) throw fetchError
 
@@ -61,7 +71,7 @@ export const useFriends = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [referrer, campaign])
 
   const addFriend = async (friendData: Omit<Friend, 'id' | 'created_at' | 'updated_at' | 'contracts_completed' | 'ranking_position' | 'ranking_status' | 'is_top_1500' | 'can_be_replaced' | 'post_verified_1' | 'post_verified_2' | 'post_url_1' | 'post_url_2'>) => {
     try {
@@ -140,8 +150,8 @@ export const useFriends = () => {
 
       // Amigo inserido com sucesso
 
-      // Atualizar contratos do membro referrer
-      await updateReferrerContracts(friendData.referrer);
+      // NÃO atualizar contratos aqui - será feito pelo PublicRegister.tsx
+      // (Evita duplicação devido a múltiplas funções incrementando)
 
       // Recarregar dados
       await fetchFriends()
@@ -180,29 +190,11 @@ export const useFriends = () => {
         return;
       }
 
-      // Incrementar contratos completados
-      const newContractsCount = referrerMember.contracts_completed + 1;
+      // REMOVIDO: Incremento manual de contratos (duplicação corrigida)
+      // O contracts_completed deve ser atualizado apenas pela função updateMemberCountersAfterRegistration()
+      // no PublicRegister.tsx que conta os amigos reais ativos
       
-      // Incrementando contratos do referrer
-
-      // Atualizar contratos do referrer
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({ 
-          contracts_completed: newContractsCount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', referrerMember.id);
-
-      if (updateError) {
-        // Erro ao atualizar contratos do referrer
-        return;
-      }
-
-      // Contratos do referrer atualizados com sucesso
-      
-      // Atualizar ranking após mudança nos contratos
-      await updateRanking();
+      console.log('✅ Amigo adicionado sem incremento manual de contratos');
       
     } catch (err) {
       // Erro ao atualizar contratos do referrer
@@ -310,49 +302,70 @@ export const useFriends = () => {
 
   const softDeleteFriend = async (friendId: string) => {
     try {
-      // Executando soft delete do amigo
+      console.log(`🔧 Iniciando soft delete do amigo ${friendId}`);
       
       // Buscar dados do amigo antes de deletar
       const { data: friendData, error: fetchError } = await supabase
-        .from('friends')
-        .select('referrer')
+        .from('members')  // Corrigido: usar tabela members, não friends
+        .select('name, referrer')
         .eq('id', friendId)
+        .is('deleted_at', null) // Só selecionar se não estiver excluído
         .single();
 
       if (fetchError) {
-        // Erro ao buscar dados do amigo
-        throw fetchError;
+        console.error('❌ Erro ao buscar dados do amigo:', fetchError);
+        throw new Error(`Amigo não encontrado: ${fetchError.message}`);
       }
 
-      // Atualizar apenas o campo deleted_at
-      const { data, error } = await supabase
-        .from('friends')
+      if (!friendData) {
+        throw new Error('Amigo já foi excluído ou não existe');
+      }
+
+      console.log(`📝 Excluindo amigo: ${friendData.name}`);
+
+      // Atualizar campo deleted_at e status
+      const { error } = await supabase
+        .from('members')
         .update({ 
-          deleted_at: new Date().toISOString()
+          deleted_at: new Date().toISOString(),
+          status: 'Inativo',
+          updated_at: new Date().toISOString()
         })
-        .eq('id', friendId)
-        .select()
-        .single()
+        .eq('id', friendId);
 
       if (error) {
-        // Erro no soft delete
-        throw error;
+        console.error('❌ Erro no soft delete:', error);
+        throw new Error(`Erro ao excluir amigo: ${error.message}`);
       }
 
-      // Soft delete executado com sucesso
+      console.log('✅ Amigo excluído com sucesso');
 
       // Atualizar contadores do membro referrer
       if (friendData?.referrer) {
-        // Atualizando contadores após exclusão do amigo
+        console.log(`🔄 Atualizando contadores do referrer: ${friendData.referrer}`);
         await updateMemberCountersAfterDelete(friendData.referrer);
+      }
+
+      // Excluir entrada em auth_users se existir
+      const { error: authDeleteError } = await supabase
+        .from('auth_users')
+        .delete()
+        .eq('name', friendData.name);
+
+      if (authDeleteError) {
+        console.error('❌ Erro ao excluir auth_users:', authDeleteError);
+        // Não falhar aqui, auth_users pode não existir
+      } else {
+        console.log('✅ Usuário excluído de auth_users');
       }
 
       // Recarregar dados após exclusão
       await fetchFriends();
 
-      return { success: true, data };
+      console.log('✅ Soft delete de amigo concluído');
+      return { success: true };
     } catch (err) {
-      // Erro geral no softDeleteFriend
+      console.error('❌ Erro no soft delete de amigo:', err);
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Erro ao excluir amigo' 
@@ -456,53 +469,24 @@ export const useFriends = () => {
       }
 
       // Atualizar ranking de todos os membros
-      await updateAllMembersRanking();
+      await updateRankingAutomatically();
 
     } catch (err) {
       // Erro ao atualizar ranking e status
     }
   }
 
-  // Função para atualizar ranking de todos os membros
-  const updateAllMembersRanking = async () => {
+  // Função para atualizar ranking usando sistema automático do banco
+  const updateRankingAutomatically = async () => {
     try {
-      // Atualizando ranking de todos os membros
+      // Usar função RPC do banco que já tem sistema automático por campanha
+      const { error } = await supabase.rpc('update_complete_ranking');
       
-      // Buscar todos os membros ordenados por contratos
-      const { data: membersData, error: fetchError } = await supabase
-        .from('members')
-        .select('id, contracts_completed, created_at')
-        .eq('status', 'Ativo')
-        .is('deleted_at', null)
-        .order('contracts_completed', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (fetchError) {
-        // Erro ao buscar membros para ranking
-        return;
+      if (error) {
+        console.warn('Erro ao executar ranking automático:', error);
       }
-
-      // Atualizar ranking_position de cada membro
-      for (let i = 0; i < membersData.length; i++) {
-        const member = membersData[i];
-        const { error: updateError } = await supabase
-          .from('members')
-          .update({ 
-            ranking_position: i + 1,
-            is_top_1500: i < 10,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', member.id);
-
-        if (updateError) {
-          // Erro ao atualizar ranking do membro
-        }
-      }
-
-      // Ranking de todos os membros atualizado
-
     } catch (err) {
-      // Erro ao atualizar ranking geral
+      console.warn('Erro ao executar ranking automático:', err);
     }
   }
 

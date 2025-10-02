@@ -215,7 +215,7 @@ export default function PaidContracts() {
             <div className="bg-yellow-50 p-4 rounded-lg mb-4">
               <p className="text-sm text-yellow-800">
                 <strong>Quando ativada:</strong><br />
-                • Cada membro poderá cadastrar até 15 duplas pagas<br />
+                • Cada membro poderá cadastrar 15 duplas de amigos<br />
                 • Total de 22.500 contratos (45.000 pessoas)<br />
                 • Fiscalização via posts do Instagram<br />
                 • Hashtags únicas para cada contrato

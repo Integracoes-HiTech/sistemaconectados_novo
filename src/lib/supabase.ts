@@ -1,8 +1,8 @@
 // lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://hihvewjyfjcwhjoerule.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpaHZld2p5Zmpjd2hqb2VydWxlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzU1MTAyMCwiZXhwIjoyMDczMTI3MDIwfQ.VupFTs1imopXgiIfuWFjRAq2KutaLmpuNOGX9NqCER8'
+const supabaseUrl = 'https://zveysullpsdopcwsncai.supabase.co'
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -28,6 +28,7 @@ export interface AuthUser {
   role: string
   full_name: string
   display_name?: string
+  campaign?: string
   created_at: string
   updated_at: string
 }

@@ -39,7 +39,7 @@ export interface ReportData {
   usersByCity: Record<string, number>
 }
 
-export const useReports = (referrer?: string) => {
+export const useReports = (referrer?: string, campaign?: string) => {
   const [reportData, setReportData] = useState<ReportData>({
     usersByLocation: {},
     registrationsByDay: [],
@@ -62,6 +62,10 @@ export const useReports = (referrer?: string) => {
       
       if (referrer) {
         query = query.eq('referrer', referrer)
+      }
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign)
       }
 
       const { data: members, error } = await query
@@ -91,7 +95,7 @@ export const useReports = (referrer?: string) => {
     } finally {
       setLoading(false)
     }
-  }, [referrer])
+  }, [referrer, campaign])
 
   useEffect(() => {
     // Limpar estado anterior antes de buscar novos dados

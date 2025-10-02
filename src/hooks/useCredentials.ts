@@ -30,7 +30,7 @@ export const useCredentials = () => {
   }
 
   // Criar usuário de autenticação com credenciais geradas
-  const createAuthUser = async (userData: { name: string; instagram: string; phone: string; referrer?: string; display_name?: string }, credentials: Credentials) => {
+  const createAuthUser = async (userData: { name: string; instagram: string; phone: string; referrer?: string; display_name?: string; campaign?: string }, credentials: Credentials) => {
     try {
       setLoading(true)
 
@@ -90,7 +90,8 @@ export const useCredentials = () => {
         display_name: userData.display_name || null,
         instagram: userData.instagram,
         phone: userData.phone,
-        is_active: false // ← MUDANÇA: Status inativo por padrão
+        is_active: false, // ← MUDANÇA: Status inativo por padrão
+        campaign: userData.campaign || 'A' // Usar campanha do usuário ou padrão A
       }
 
       const { data, error } = await supabase
@@ -148,7 +149,7 @@ export const useCredentials = () => {
   }
 
   // Processo completo: gerar credenciais únicas e criar usuário
-  const createUserWithCredentials = async (userData: { name: string; instagram: string; phone: string; referrer?: string; display_name?: string }): Promise<{
+  const createUserWithCredentials = async (userData: { name: string; instagram: string; phone: string; referrer?: string; display_name?: string; campaign?: string }): Promise<{
     success: true;
     credentials: Credentials;
     authUser: unknown;

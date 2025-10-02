@@ -37,7 +37,7 @@ export interface FriendRanking {
   member_sector: string;
 }
 
-export const useFriendsRanking = () => {
+export const useFriendsRanking = (campaign?: string) => {
   const [friends, setFriends] = useState<FriendRanking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +47,24 @@ export const useFriendsRanking = () => {
       setLoading(true);
       setError(null);
 
-      // Buscando ranking dos amigos
-
-      const { data, error: fetchError } = await supabase
-        .from('v_friends_ranking')
-        .select('*')
+      // Buscando ranking dos amigos diretamente da tabela friends
+      // com JOIN para obter dados do membro referrer
+      let query = supabase
+        .from('friends')
+        .select(`
+          *,
+          members!inner(name, instagram, phone, city, sector, campaign)
+        `)
+        .eq('status', 'Ativo')
+        .is('deleted_at', null)
         .order('contracts_completed', { ascending: false })
         .order('created_at', { ascending: true });
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         // Erro ao buscar ranking dos amigos
@@ -61,8 +72,18 @@ export const useFriendsRanking = () => {
         return;
       }
 
+      // Transformar dados para incluir informações do membro referrer
+      const transformedData = (data || []).map(friend => ({
+        ...friend,
+        member_name: friend.members?.name || '',
+        member_instagram: friend.members?.instagram || '',
+        member_phone: friend.members?.phone || '',
+        member_city: friend.members?.city || '',
+        member_sector: friend.members?.sector || ''
+      }));
+
       // Ranking dos amigos carregado
-      setFriends(data || []);
+      setFriends(transformedData);
     } catch (err) {
       // Erro geral ao buscar ranking dos amigos
       setError('Erro inesperado ao carregar dados');
@@ -247,7 +268,7 @@ export const useFriendsRanking = () => {
 
   useEffect(() => {
     fetchFriendsRanking();
-  }, []);
+  }, [campaign]);
 
   // Função para excluir amigo (soft delete)
   const softDeleteFriend = async (friendId: string) => {
@@ -398,7 +419,7 @@ export const useFriendsRanking = () => {
       }
 
       // Atualizar ranking geral
-      await updateAllMembersRanking();
+      await updateRankingAutomatically();
 
     } catch (err) {
       // Erro ao atualizar ranking e status
@@ -410,36 +431,12 @@ export const useFriendsRanking = () => {
     try {
       // Atualizando ranking de todos os membros
       
-      const { data: membersData, error: fetchError } = await supabase
-        .from('members')
-        .select('id, contracts_completed, created_at')
-        .eq('status', 'Ativo')
-        .is('deleted_at', null)
-        .order('contracts_completed', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (fetchError) {
-        // Erro ao buscar membros para ranking
-        return;
+      // Usar função RPC do banco que já tem sistema automático por campanha
+      const { error } = await supabase.rpc('update_complete_ranking');
+      
+      if (error) {
+        console.warn('Erro ao executar ranking automático:', error);
       }
-
-      for (let i = 0; i < membersData.length; i++) {
-        const member = membersData[i];
-        const { error: updateError } = await supabase
-          .from('members')
-          .update({ 
-            ranking_position: i + 1,
-            is_top_1500: i < 1500,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', member.id);
-
-        if (updateError) {
-          // Erro ao atualizar ranking do membro
-        }
-      }
-
-      // Ranking de todos os membros atualizado
 
     } catch (err) {
       // Erro ao atualizar ranking geral

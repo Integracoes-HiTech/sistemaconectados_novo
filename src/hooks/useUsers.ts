@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, User } from '@/lib/supabase'
 
-export const useUsers = (referrer?: string) => {
+export const useUsers = (referrer?: string, campaign?: string) => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +19,7 @@ export const useUsers = (referrer?: string) => {
     }, 100)
     
     return () => clearTimeout(timeoutId)
-  }, [referrer])
+  }, [referrer, campaign])
 
   const fetchUsers = async () => {
     try {
@@ -44,6 +44,10 @@ export const useUsers = (referrer?: string) => {
         // Buscando usuários para referrer
       } else {
         // Buscando todos os usuários
+      }
+      
+      if (campaign) {
+        query = query.eq('campaign', campaign)
       }
 
       const { data, error } = await query
@@ -112,7 +116,7 @@ export const useUsers = (referrer?: string) => {
     } catch (err) {
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao atualizar usuário' 
+        error: err instanceof Error ? err.message : 'Problema ao atualizar usuário' 
       }
     }
   }

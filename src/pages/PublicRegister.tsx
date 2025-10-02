@@ -67,6 +67,11 @@ export default function PublicRegister() {
   const [instagramValidationError, setInstagramValidationError] = useState<string | null>(null);
   const [isInstagramValid, setIsInstagramValid] = useState(false);
   
+  // Estados de validação do Instagram do parceiro
+  const [isValidatingCoupleInstagram, setIsValidatingCoupleInstagram] = useState(false);
+  const [coupleInstagramValidationError, setCoupleInstagramValidationError] = useState<string | null>(null);
+  const [isCoupleInstagramValid, setIsCoupleInstagramValid] = useState(false);
+  
   const { addUser, checkUserExists } = useUsers();
   const { getUserByLinkId, incrementClickCount } = useUserLinks();
   const { createUserWithCredentials } = useCredentials();
@@ -359,55 +364,54 @@ export default function PublicRegister() {
       }
 
       // Atualizar ranking de todos os membros
-      await updateAllMembersRanking();
+      await updateRankingAutomatically();
 
     } catch (err) {
       // Erro ao atualizar ranking e status
     }
   }
 
-  // Função para atualizar ranking de todos os membros
-  const updateAllMembersRanking = async () => {
+  // Função para atualizar ranking usando sistema automático do banco
+  const updateRankingAutomatically = async () => {
     try {
-      // Atualizando ranking de todos os membros
+      // Usar função RPC do banco que já tem sistema automático por campanha
+      const { error } = await supabase.rpc('update_complete_ranking');
       
-      // Buscar todos os membros ordenados por contratos
-      const { data: membersData, error: fetchError } = await supabase
-        .from('members')
-        .select('id, contracts_completed, created_at')
-        .eq('status', 'Ativo')
-        .is('deleted_at', null)
-        .order('contracts_completed', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (fetchError) {
-        // Erro ao buscar membros para ranking
-        return;
+      if (error) {
+        console.warn('Erro ao executar ranking automático:', error);
       }
-
-      // Atualizar ranking_position de cada membro
-      for (let i = 0; i < membersData.length; i++) {
-        const member = membersData[i];
-        const { error: updateError } = await supabase
-          .from('members')
-          .update({ 
-            ranking_position: i + 1,
-            is_top_1500: i < 10,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', member.id);
-
-        if (updateError) {
-          // Erro ao atualizar ranking do membro
-        }
-      }
-
-      // Ranking de todos os membros atualizado
-
     } catch (err) {
-      // Erro ao atualizar ranking geral
+      console.warn('Erro ao executar ranking automático:', err);
     }
   }
+
+  // Função de validação do Instagram do parceiro
+  const handleCoupleInstagramBlur = async () => {
+    if (!formData.couple_instagram.trim()) {
+      setIsCoupleInstagramValid(false);
+      setCoupleInstagramValidationError(null);
+      return;
+    }
+
+    setIsValidatingCoupleInstagram(true);
+    setCoupleInstagramValidationError(null);
+
+    try {
+      const validation = await validateInstagram(formData.couple_instagram);
+      if (validation.isValid) {
+        setIsCoupleInstagramValid(true);
+        setCoupleInstagramValidationError(null);
+      } else {
+        setIsCoupleInstagramValid(false);
+        setCoupleInstagramValidationError(validation.error || 'Instagram inválido');
+      }
+    } catch (error) {
+      setIsCoupleInstagramValid(false);
+      setCoupleInstagramValidationError('Erro ao validar Instagram');
+    } finally {
+      setIsValidatingCoupleInstagram(false);
+    }
+  };
 
   const validateDuplicates = async () => {
     const errors: Record<string, string> = {};
@@ -429,7 +433,7 @@ export default function PublicRegister() {
       // Verificar duplicatas com membros existentes
       const { data: membersData, error: membersError } = await supabase
         .from('members')
-        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram')
+        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign')
         .eq('status', 'Ativo')
         .is('deleted_at', null);
 
@@ -441,7 +445,7 @@ export default function PublicRegister() {
       // Verificar duplicatas com amigos existentes
       const { data: friendsData, error: friendsError } = await supabase
         .from('friends')
-        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram')
+        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign')
         .eq('status', 'Ativo')
         .is('deleted_at', null);
 
@@ -450,8 +454,10 @@ export default function PublicRegister() {
         return errors;
       }
 
-      // Combinar dados de membros e amigos
+      // Combinar dados de membros e amigos - VERIFICAR TODAS AS CAMPANHAS
+
       const allUsers = [...(membersData || []), ...(friendsData || [])];
+
 
       // Verificar duplicatas
       for (const user of allUsers) {
@@ -460,30 +466,47 @@ export default function PublicRegister() {
         const userInstagram = user.instagram?.toLowerCase() || '';
         const userCoupleInstagram = user.couple_instagram?.toLowerCase() || '';
 
-        // Verificar telefone principal
-        if (userPhone === normalizedPhone) {
+        // Verificar se é uma duplicata completa (mesmo telefone E mesmo Instagram)
+        if (userPhone === normalizedPhone && userInstagram === formData.instagram.toLowerCase()) {
+          errors.phone = `Usuário já cadastrado com este telefone e Instagram`;
+          errors.instagram = `Usuário já cadastrado com este telefone e Instagram`;
+          break; // Parar já que encontrou duplicata completa
+        }
+
+        // Verificar se é uma duplicata completa da segunda pessoa
+        if (userCouplePhone === normalizedCouplePhone && userCoupleInstagram === formData.couple_instagram.toLowerCase()) {
+          errors.couple_phone = `Usuário já cadastrado com este telefone e Instagram`;
+          errors.couple_instagram = `Usuário já cadastrado com este telefone e Instagram`;
+          break; // Parar já que encontrou duplicata completa
+        }
+
+        // Verificar telefone principal independente (apenas se não for duplicata completa)
+        if (userPhone === normalizedPhone && !errors.phone) {
           errors.phone = `Este telefone já está cadastrado`;
         }
 
-        // Verificar telefone do parceiro
-        if (userPhone === normalizedCouplePhone) {
+        // Verificar telefone do parceiro (apenas se não for duplicata completa)
+        if (userPhone === normalizedCouplePhone && !errors.couple_phone) {
           errors.couple_phone = `Este telefone já está cadastrado`;
         }
-        if (userCouplePhone === normalizedCouplePhone) {
+        if (userCouplePhone === normalizedCouplePhone && !errors.couple_phone) {
           errors.couple_phone = `Este telefone já está cadastrado`;
         }
 
-        // Verificar Instagram principal
-        if (userInstagram === formData.instagram.toLowerCase()) {
+        // Verificar Instagram principal (apenas se não for duplicata completa)
+        if (userInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
           errors.instagram = `Este Instagram já está cadastrado`;
         }
 
-        // Verificar Instagram do parceiro
-        if (userInstagram === formData.couple_instagram.toLowerCase()) {
+        // Verificar Instagram do parceiro (apenas se não for duplicata completa)
+        if (userInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
           errors.couple_instagram = `Este Instagram já está cadastrado`;
         }
-        if (userCoupleInstagram === formData.couple_instagram.toLowerCase()) {
+        if (userCoupleInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
           errors.couple_instagram = `Este Instagram já está cadastrado`;
+        }
+        if (userCoupleInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
+          errors.instagram = `Este Instagram já está cadastrado`;
         }
       }
 
@@ -655,6 +678,8 @@ export default function PublicRegister() {
             referrer: result.data.user_data?.name || 'Usuário do Sistema' 
           }));
           
+          // Link normal - continuar com o fluxo padrão
+          
           // Incrementar contador de cliques quando o link for acessado
           await incrementClickCount(linkId);
         } else {
@@ -665,7 +690,7 @@ export default function PublicRegister() {
         // Erro ao buscar dados do referrer
         setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
       }
-  }, [linkId, getUserByLinkId, incrementClickCount]);
+  }, [linkId, getUserByLinkId, incrementClickCount, navigate]);
 
   // Buscar dados do referrer quando o componente carregar
   useEffect(() => {
@@ -756,6 +781,7 @@ export default function PublicRegister() {
           referrer: formData.referrer,
           registration_date: new Date().toISOString().split('T')[0],
           status: 'Ativo' as const,
+          campaign: linkData?.campaign || referrerData?.campaign || 'A', // Usar campanha do link primeiro, depois referrer, depois padrão A
           // Dados do parceiro (obrigatório)
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
@@ -804,6 +830,7 @@ export default function PublicRegister() {
           referrer: formData.referrer,
           registration_date: new Date().toISOString().split('T')[0],
           status: 'Ativo' as const,
+          campaign: linkData?.campaign || referrerData?.campaign || 'A', // Usar campanha do link primeiro, depois referrer, depois padrão A
           // Dados do parceiro (obrigatório)
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
@@ -830,7 +857,8 @@ export default function PublicRegister() {
           sector: formData.sector.trim(),
           referrer: formData.referrer,
           registration_date: new Date().toISOString().split('T')[0],
-          status: 'Ativo' as const
+          status: 'Ativo' as const,
+          campaign: linkData?.campaign || referrerData?.campaign || 'A' // Usar campanha do link primeiro, depois referrer, depois padrão A
         };
 
         const userResult = await addUser(userData);
@@ -844,7 +872,8 @@ export default function PublicRegister() {
           ...userData,
           full_name: `${formData.name} e ${formData.couple_name} - Dupla`,
           display_name: `${formData.name} & ${formData.couple_name}`,
-          role: 'Membro'
+          role: 'Membro',
+          campaign: linkData?.campaign || referrerData?.campaign || 'A' // Usar campanha do link primeiro, depois referrer, depois padrão A
         };
         
         const credentialsResult = await createUserWithCredentials(userDataForCouple);
@@ -964,7 +993,7 @@ export default function PublicRegister() {
                             .update({ display_name: firstName })
                             .eq('username', username);
                         } catch (error) {
-                          console.warn('Erro ao atualizar display_name:', error);
+                          console.warn('Tivemos um problema ao atualizar display_name:', error);
                         }
                       }
 
@@ -1330,14 +1359,28 @@ export default function PublicRegister() {
               placeholder="Instagram da Segunda Pessoa (@seuusuario)"
               value={formData.couple_instagram}
               onChange={(e) => handleInputChange('couple_instagram', e.target.value)}
-              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.couple_instagram ? 'border-red-500' : ''}`}
+              onBlur={handleCoupleInstagramBlur}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.couple_instagram ? 'border-red-500' : ''} ${coupleInstagramValidationError ? 'border-red-500' : ''}`}
               required
+              disabled={isValidatingCoupleInstagram}
             />
+            {/* Indicador de carregamento da validação */}
+            {isValidatingCoupleInstagram && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                <div className="w-5 h-5 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {/* Indicador de validação bem-sucedida */}
+            {isCoupleInstagramValid && !isValidatingCoupleInstagram && !coupleInstagramValidationError && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+              </div>
+            )}
           </div>
-          {formErrors.couple_instagram && (
+          {(formErrors.couple_instagram || coupleInstagramValidationError) && (
             <div className="flex items-center gap-1 text-red-400 text-sm">
               <AlertCircle className="w-4 h-4" />
-              <span>{formErrors.couple_instagram}</span>
+              <span>{formErrors.couple_instagram || coupleInstagramValidationError}</span>
             </div>
           )}
         </div>

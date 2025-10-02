@@ -65,7 +65,45 @@ export default function Dashboard() {
   const [itemsPerPage] = useState(50); // 50 itens por página para melhor performance com grandes volumes
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user, logout, isAdmin, isFelipeAdmin, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+  const { user, logout, isAdmin, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+
+  // Configuração de cores por campanha
+  const getCampaignTheme = () => {
+    if (user?.campaign === 'B') {
+      return {
+        primary: 'bg-blue-600',
+        primaryHover: 'hover:bg-blue-700',
+        primaryLight: 'bg-blue-50',
+        primaryBorder: 'border-blue-200',
+        primaryText: 'text-blue-800',
+        primaryAccent: 'bg-blue-100',
+        primaryButton: 'bg-blue-600 hover:bg-blue-700',
+        primaryCard: 'border-l-blue-500',
+        primaryBadge: 'bg-blue-100 text-blue-800',
+        primaryIcon: 'text-blue-600',
+        primaryGradient: 'from-blue-500 to-blue-600',
+        primaryShadow: 'shadow-blue-200'
+      };
+    } else {
+      // Campanha A (padrão)
+      return {
+        primary: 'bg-blue-600',
+        primaryHover: 'hover:bg-blue-700',
+        primaryLight: 'bg-blue-50',
+        primaryBorder: 'border-blue-200',
+        primaryText: 'text-blue-800',
+        primaryAccent: 'bg-blue-100',
+        primaryButton: 'bg-blue-600 hover:bg-blue-700',
+        primaryCard: 'border-l-blue-500',
+        primaryBadge: 'bg-blue-100 text-blue-800',
+        primaryIcon: 'text-blue-600',
+        primaryGradient: 'from-blue-500 to-blue-600',
+        primaryShadow: 'shadow-blue-200'
+      };
+    }
+  };
+
+  const theme = getCampaignTheme();
 
   // Função para remover membro (soft delete - apenas administradores completos)
   const handleRemoveMember = async (memberId: string, memberName: string) => {
@@ -91,7 +129,7 @@ export default function Dashboard() {
       if (result.success) {
         toast({
           title: "Membro excluído",
-          description: `O membro "${memberName}" foi excluído com sucesso. Acesso ao sistema e links foram removidos definitivamente.`,
+          description: `O membro "${memberName}" foi excluído com sucesso. Os amigos cadastrados por ele permanecem ativos no sistema.`,
         });
       } else {
         throw new Error(result.error || 'Erro desconhecido');
@@ -144,9 +182,9 @@ export default function Dashboard() {
   };
 
   // Lógica de filtro por referrer:
-  // Admin e Felipe Admin veem todos os usuários (sem filtro)
+  // Admin veem todos os usuários (sem filtro)
   // - Outros roles: vê apenas usuários que eles indicaram (filtro por user.full_name)
-  const isAdminUser = isAdmin() || isFelipeAdmin();
+  const isAdminUser = isAdmin();
   const referrerFilter = isAdminUser ? undefined : user?.full_name;
   const userIdFilter = isAdminUser ? undefined : user?.id;
   
@@ -154,10 +192,10 @@ export default function Dashboard() {
   // Verificar todas as funções de role
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
-  const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter);
-  const { stats, loading: statsLoading } = useStats(referrerFilter);
-  const { reportData, loading: reportsLoading } = useReports(referrerFilter);
-  const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter);
+  const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter, user?.campaign);
+  const { stats, loading: statsLoading } = useStats(referrerFilter, user?.campaign);
+  const { reportData, loading: reportsLoading } = useReports(referrerFilter, user?.campaign);
+  const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter, user?.campaign);
   
   // Novos hooks para o sistema de membros
   const { 
@@ -171,7 +209,7 @@ export default function Dashboard() {
     getMembersByStatus,
     getMemberRole,
     softDeleteMember
-  } = useMembers(referrerFilter);
+  } = useMembers(referrerFilter, user?.campaign);
 
   // Hook para ranking de amigos
   const { 
@@ -180,7 +218,8 @@ export default function Dashboard() {
     error: friendsError,
     getFriendsStats,
     softDeleteFriend
-  } = useFriendsRanking();
+  } = useFriendsRanking(user?.campaign);
+
   
   
   const { 
@@ -206,6 +245,7 @@ export default function Dashboard() {
 
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
+
 
   const handleLogout = () => {
     logout();
@@ -304,8 +344,7 @@ export default function Dashboard() {
       friend.couple_city.toLowerCase().includes(friendsSearchTerm.toLowerCase()) ||
       friend.couple_sector.toLowerCase().includes(friendsSearchTerm.toLowerCase()) ||
       // Campos adicionais
-      friend.contracts_completed.toString().includes(friendsSearchTerm) ||
-      friend.ranking_position?.toString().includes(friendsSearchTerm);
+      friend.contracts_completed.toString().includes(friendsSearchTerm);
 
     const matchesPhone = friendsPhoneSearchTerm === "" || 
       friend.phone.includes(friendsPhoneSearchTerm) ||
@@ -344,11 +383,6 @@ export default function Dashboard() {
   const paginatedMembers = getPaginatedData(filteredMembers, membersCurrentPage);
   const paginatedFriends = getPaginatedData(filteredFriends, friendsCurrentPage);
 
-  // Adicionar posição calculada aos amigos
-  const friendsWithPosition = paginatedFriends.map((friend, index) => ({
-    ...friend,
-    calculated_position: ((friendsCurrentPage - 1) * itemsPerPage) + index + 1
-  }));
   
   // Total de páginas
   const totalMembersPages = getTotalPages(filteredMembers.length);
@@ -376,9 +410,9 @@ export default function Dashboard() {
   // Loading state
   if (usersLoading || statsLoading || reportsLoading || linksLoading || membersLoading || settingsLoading) {
     return (
-      <div className="min-h-screen bg-institutional-blue flex items-center justify-center">
+      <div className={`min-h-screen ${user?.campaign === 'B' ? 'bg-blue-100' : 'bg-institutional-blue'} flex items-center justify-center`}>
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className={`w-8 h-8 border-2 ${user?.campaign === 'B' ? 'border-institutional-gold' : 'border-institutional-gold'} border-t-transparent rounded-full animate-spin mx-auto mb-4`} />
           <p className="text-white">Carregando dados do banco...</p>
         </div>
       </div>
@@ -386,21 +420,21 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-institutional-blue">
+    <div className={`min-h-screen ${user?.campaign === 'B' ? 'bg-blue-100' : 'bg-institutional-blue'}`}>
       {/* Header Personalizado */}
-      <header className="bg-white shadow-md border-b-2 border-institutional-gold">
+      <header className={`bg-white shadow-md border-b-2 ${user?.campaign === 'B' ? 'border-institutional-gold' : 'border-institutional-gold'}`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Logo size="md" />
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <span className="text-institutional-blue font-medium">Bem-vindo, {user?.display_name || user?.name}</span>
+                <span className={`${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'} font-medium`}>Bem-vindo, {user?.name}</span>
                 <div className="text-sm text-muted-foreground">{user?.role}</div>
               </div>
               <Button
                 onClick={handleLogout}
                 variant="outline"
-                className="border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10"
+                className={`${user?.campaign === 'B' ? 'border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10' : 'border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10'}`}
               >
                 Sair
               </Button>
@@ -414,14 +448,16 @@ export default function Dashboard() {
       {/* Conteúdo Principal */}
       <main className="container mx-auto px-4 py-8">
       {/* Header Fixed */}
-      <div className="bg-white shadow-[var(--shadow-card)] rounded-lg p-6 mb-8 border border-institutional-light">
+      <div className={`bg-white shadow-[var(--shadow-card)] rounded-lg p-6 mb-8 border ${user?.campaign === 'B' ? 'border-institutional-light' : 'border-institutional-light'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-institutional-blue">
-              Dashboard - Sistema de Membros Conectados
+            <h1 className={`text-2xl font-bold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
+              Dashboard - Sistema de Gestão Conectados
                 {isAdmin() && (
-                <span className="ml-2 text-sm bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                    {isFelipeAdmin() ? 'FELIPE ADMIN' : user?.username === 'admin' ? 'ADMIN' : 'VEREADOR'}
+                <span className={`ml-2 text-sm px-2 py-1 rounded-full ${user?.campaign === 'B' ? 'bg-red-100 text-red-800' : 'bg-red-100 text-red-800'}`}>
+                    {user?.username === 'wegneycosta' ? 'VEREADOR' : 
+                     user?.username === 'felipe' ? 'FELIPE' : 
+                     user?.role === 'Membro' ? 'MEMBRO' : 'ADMIN'}
                 </span>
                 )}
             </h1>
@@ -435,23 +471,55 @@ export default function Dashboard() {
           
             {(canGenerateLinks() || isAdminUser) && (
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={generateLink}
-              className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium"
-            >
-              <Share2 className="w-4 h-4 mr-2" />
-              {isAdminUser ? 'Gerar e Copiar Link' : 'Gerar e Copiar Link'}
-            </Button>
+            {canGenerateLinks() && (
+              <Button
+                onClick={generateLink}
+                className={`${user?.campaign === 'B' ? 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue' : 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue'} font-medium`}
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Gerar e Copiar Link
+              </Button>
+            )}
+            
             
             {isAdminUser && (
               <Button
                 onClick={() => {
                   try {
                     // Verificar se há dados para exportar
-                    if (!memberStats || !reportData || (memberStats.total_members === 0 && memberStats.current_member_count === 0)) {
+                    if (!memberStats || !reportData) {
+                      toast({
+                        title: "⚠️ Dados não carregados",
+                        description: "Aguarde o carregamento dos dados antes de exportar",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    // Verificar se há dados nos relatórios
+                    const hasReportData = (
+                      Object.keys(reportData.usersByLocation).length > 0 ||
+                      Object.keys(reportData.usersByCity).length > 0 ||
+                      Object.keys(reportData.sectorsGroupedByCity).length > 0 ||
+                      reportData.registrationsByDay.length > 0 ||
+                      reportData.usersByStatus.length > 0 ||
+                      reportData.recentActivity.length > 0
+                    );
+
+                    if (!hasReportData) {
                       toast({
                         title: "⚠️ Nenhum dado para exportar",
-                        description: "Não é possível gerar um relatório sem dados",
+                        description: "Não há dados nos relatórios para exportar. Cadastre membros primeiro.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    // Verificar se há membros cadastrados
+                    if (memberStats.total_members === 0 && memberStats.current_member_count === 0) {
+                      toast({
+                        title: "⚠️ Nenhum membro cadastrado",
+                        description: "Não é possível gerar um relatório sem membros cadastrados",
                         variant: "destructive",
                       });
                       return;
@@ -515,11 +583,11 @@ export default function Dashboard() {
 
         {/* Controle de Tipo de Links - Apenas Administradores */}
         {isAdmin() && (
-          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6">
+          <Card className={`shadow-[var(--shadow-card)] border-l-4 ${user?.campaign === 'B' ? 'border-l-blue-500' : 'border-l-blue-500'} mb-6`}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+              <CardTitle className={`flex items-center gap-2 ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
                 <Settings className="w-5 h-5" />
-                Tipo de Links de Cadastro de Membros
+                Tipo de Links de Cadastro 
               </CardTitle>
               <CardDescription>
                 Mudar para cadastrar novos membros ou amigos
@@ -528,12 +596,12 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-6">
                 {/* Informação sobre Configurações */}
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                <div className={`p-4 rounded-lg border ${user?.campaign === 'B' ? 'bg-blue-50 border-blue-200' : 'bg-blue-50 border-blue-200'}`}>
+                  <h4 className={`font-semibold mb-3 flex items-center gap-2 ${user?.campaign === 'B' ? 'text-blue-800' : 'text-blue-800'}`}>
                     <Settings className="w-4 h-4" />
                     Configurações do Sistema
                   </h4>
-                  <p className="text-blue-700 text-sm mb-3">
+                  <p className={`text-sm mb-3 ${user?.campaign === 'B' ? 'text-blue-700' : 'text-blue-700'}`}>
                     Tipo de links atual: <strong>
                       {settings?.member_links_type === 'members' 
                         ? 'Novos Membros (duplas)'
@@ -544,7 +612,7 @@ export default function Dashboard() {
                   <Button
                     size="sm"
                     onClick={() => navigate('/settings')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    className={`${user?.campaign === 'B' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
                   >
                     <Settings className="w-4 h-4 mr-2" />
                     Gerenciar Configurações
@@ -632,7 +700,7 @@ export default function Dashboard() {
               </CardTitle>
               <CardDescription>
                 {isAdminUser 
-                  ? 'Distribuição por setor - Todos os usuários' 
+                  ? 'Distribuição por setor - Todos os membros' 
                   : ''
                 }
               </CardDescription>
@@ -715,7 +783,7 @@ export default function Dashboard() {
                 Membros por Cidade
               </CardTitle>
               <CardDescription>
-                Total de pessoas cadastradas em cada cidade
+                Total de membros cadastradas em cada cidade
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -815,7 +883,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-institutional-blue">
                 <Users className="w-5 h-5" />
-                Top 5 - Membros com mais amigos
+                Top 5 - Membros
               </CardTitle>
               <CardDescription>
                 Ranking dos membros que mais cadastraram amigos
@@ -914,7 +982,7 @@ export default function Dashboard() {
         )}
 
         {/* Seção para Membros Não-Administradores */}
-        {!isAdmin() && (
+        {!isAdmin() && settings?.member_links_type === 'members' && (
           <div className="mb-8">
             {/* Informações sobre Amigos */}
             <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6">
@@ -932,12 +1000,12 @@ export default function Dashboard() {
                   <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <h4 className="font-semibold text-blue-800 mb-2">📅 Fase de Amigos</h4>
                     <p className="text-blue-700 text-sm mb-2">
-                      A fase de amigos será liberada em julho de 2026. 
-                      Cada membro poderá cadastrar até 15 duplas pagas quando ativada.
+                      A fase de amigos será liberada em Breve. 
+                      Cada membro poderá cadastrar 15 duplas de amigos quando ativada.
                     </p>
                     <div className="flex items-center gap-2 text-blue-600">
                       <CalendarDays className="w-4 h-4" />
-                      <span className="text-sm font-medium">Disponível em Julho 2026</span>
+                      <span className="text-sm font-medium">Disponível em Breve</span>
                     </div>
                   </div>
                   
@@ -949,7 +1017,7 @@ export default function Dashboard() {
 
             {/* Tabela dos Seus Amigos */}
             {settings?.paid_contracts_phase_active && (
-              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-purple-500">
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-institutional-blue">
                     <UserCheck className="w-5 h-5" />
@@ -991,21 +1059,21 @@ export default function Dashboard() {
         {isAdmin() && (
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-institutional-blue">Resumo do Sistema</h2>
+              <h2 className={`text-xl font-semibold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>Resumo do Sistema</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
+          <Card className={`shadow-[var(--shadow-card)] border-l-4 ${user?.campaign === 'B' ? 'border-l-institutional-gold' : 'border-l-institutional-gold'}`}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
-                  <p className="text-2xl font-bold text-institutional-blue">{memberStats?.total_members || 0}</p>
+                  <p className={`text-2xl font-bold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>{memberStats?.total_members || 0}</p>
                   <p className="text-xs text-muted-foreground">
                     {memberStats?.current_member_count || 0} / {memberStats?.max_member_limit || 1500}
                   </p>
                 </div>
-                <div className="p-3 rounded-full bg-institutional-light">
-                  <Users className="w-6 h-6 text-institutional-blue" />
+                <div className={`p-3 rounded-full ${user?.campaign === 'B' ? 'bg-institutional-light' : 'bg-institutional-light'}`}>
+                  <Users className={`w-6 h-6 ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`} />
                 </div>
               </div>
             </CardContent>
@@ -1086,7 +1154,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
               <Users className="w-5 h-5" />
-              {isAdminUser ? 'Ranking Completo de Membros' : 'Meu Ranking de Membros'}
+              {isAdminUser ? 'Membros' : 'Meu Ranking de Membros'}
             </CardTitle>
             <CardDescription>
               {isAdminUser
@@ -1475,10 +1543,8 @@ export default function Dashboard() {
 
         {/* Card de Total de Amigos (Apenas Administradores) */}
         {isAdmin() && (
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-institutional-blue">Resumo dos Amigos</h2>
-            </div>
+          <div className="mb-6 mt-8">
+           
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
               <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
                 <CardContent className="p-6">
@@ -1491,7 +1557,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <div className="p-3 rounded-full bg-institutional-light">
-                      <UserCheck className="w-6 h-6 text-institutional-blue" />
+                      <Users className="w-6 h-6 text-institutional-blue" />
                     </div>
                   </div>
                 </CardContent>
@@ -1505,11 +1571,11 @@ export default function Dashboard() {
         <Card className="shadow-[var(--shadow-card)] mt-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
-              <UserCheck className="w-5 h-5" />
-              Ranking dos Amigos 
+              <Users className="w-5 h-5" />
+              Amigos 
             </CardTitle>
             <CardDescription>
-              Ranking dos amigos 
+              Lista Completa de todos os amigos cadastrados no sistema
             </CardDescription>
             <div className="flex gap-2 mt-4">
               <Button
@@ -1658,7 +1724,6 @@ export default function Dashboard() {
               <table id="friends-table" className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-institutional-light">
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Posição</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Amigo e Parceiro</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Instagram</th>
@@ -1671,15 +1736,8 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {friendsWithPosition.map((friend) => (
+                  {paginatedFriends.map((friend) => (
                     <tr key={friend.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-institutional-blue">
-                            {friend.calculated_position}º
-                          </span>
-                        </div>
-                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">

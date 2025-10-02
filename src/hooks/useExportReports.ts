@@ -238,18 +238,25 @@ export const useExportReports = () => {
         return text.length > maxChars ? text.substring(0, maxChars - 3) + '...' : text
       }
 
-      // Título do card com posição (sem truncar nomes)
+      // Título do card com posição e contratos
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'bold')
       pdf.setTextColor(41, 128, 185)
-      pdf.text(`#${member.ranking_position || 'N/A'} - ${String(member.name || '')}`, currentX + 2, currentY + 8)
+      const positionText = member.ranking_position ? `${member.ranking_position}º` : 'N/A'
+      const contractsText = member.contracts_completed ? `${member.contracts_completed} contratos` : '0 contratos'
+      pdf.text(`${positionText} - ${String(member.name || '')}`, currentX + 2, currentY + 8)
+      
+      // Mostrar contratos na linha seguinte
+      pdf.setFontSize(6)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(`${contractsText}`, currentX + 2, currentY + 12)
 
       // Dados da pessoa principal
       pdf.setFontSize(7)
       pdf.setFont('helvetica', 'normal')
       pdf.setTextColor(0, 0, 0)
       
-      let textY = currentY + 15
+      let textY = currentY + 18  // Ajustado para dar espaço para a linha de contratos
       pdf.text(`WhatsApp: ${formatPhoneForExport(member.phone as string)}`, currentX + 2, textY)
       textY += 4.5
       pdf.text(`Instagram: ${String(member.instagram || '')}`, currentX + 2, textY)
@@ -274,7 +281,7 @@ export const useExportReports = () => {
       textY += 6
       pdf.setFontSize(6)
       pdf.setTextColor(100, 100, 100)
-      pdf.text(`Contratos: ${member.contracts_completed || '0'} | Por: ${String(member.referrer || '')}`, currentX + 2, textY)
+      pdf.text(`Por: ${String(member.referrer || '')}`, currentX + 2, textY)
 
       // Próximo card (3 por linha)
       if ((index + 1) % cardsPerRow === 0) {
@@ -362,7 +369,7 @@ export const useExportReports = () => {
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'bold')
       pdf.setTextColor(41, 128, 185)
-      pdf.text(`#${f.calculated_position || f.ranking_position || 'N/A'} - ${String(f.name || '')}`, currentX + 2, currentY + 8)
+      pdf.text(`${String(f.name || '')}`, currentX + 2, currentY + 8)
 
       // Dados da pessoa principal
       pdf.setFontSize(7)
@@ -394,7 +401,7 @@ export const useExportReports = () => {
       textY += 6
       pdf.setFontSize(6)
       pdf.setTextColor(100, 100, 100)
-      pdf.text(`Contratos: ${f.contracts_completed || '0'} | Por: ${String(f.member_name || f.referrer || '')}`, currentX + 2, textY)
+      pdf.text(`Por: ${String(f.member_name || f.referrer || '')}`, currentX + 2, textY)
 
       // Próximo card (3 por linha)
       if ((index + 1) % cardsPerRow === 0) {
@@ -486,8 +493,9 @@ export const useExportReports = () => {
     // Exportando membros com dados completos organizados
     
     const data = members.map(member => ({
-      // Posição como primeira coluna
-      'Posição': member.ranking_position || 'N/A',
+      // Posição e Performance
+      'Posição': member.ranking_position || '',
+      'Contratos Completos': member.contracts_completed || 0,
       
       // Dados da Pessoa Principal
       'Nome': member.name,
@@ -504,7 +512,6 @@ export const useExportReports = () => {
       'Setor Parceiro': member.couple_sector || '',
       
       // Informações do Sistema
-      'Contratos Completos': member.contracts_completed || 0,
       'Indicado por': member.referrer || '',
       'Data de Cadastro': member.registration_date ? new Date(member.registration_date as string).toLocaleDateString('pt-BR') : ''
     }))
@@ -694,9 +701,6 @@ export const useExportReports = () => {
     const data = friends.map(friend => {
       const f = friend as Record<string, unknown>
       return {
-        // Posição como primeira coluna
-        'Posição': f.calculated_position || f.ranking_position || 'N/A',
-        
         // Dados da Pessoa Principal
         'Nome': f.name,
         'WhatsApp': formatPhoneForExport(f.phone as string),
@@ -712,7 +716,6 @@ export const useExportReports = () => {
         'Setor Parceiro': f.couple_sector || '',
         
         // Informações do Sistema
-        'Contratos Completos': f.contracts_completed || 0,
         'Indicado por': f.member_name || f.referrer || '',
         'Data de Cadastro': (f.created_at || f.registration_date) ? new Date((f.created_at || f.registration_date) as string).toLocaleDateString('pt-BR') : ''
       }

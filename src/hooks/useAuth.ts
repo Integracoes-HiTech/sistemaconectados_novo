@@ -38,7 +38,7 @@ export const useAuth = () => {
     try {
       const { data, error } = await supabase
         .from('auth_users')
-        .select('id, username, role, is_active, display_name')
+        .select('id, username, role, is_active, display_name, campaign')
         .eq('id', userData.id)
         .eq('username', userData.username)
         .single()
@@ -113,6 +113,7 @@ export const useAuth = () => {
           role: data.role,
           full_name: data.full_name,
           display_name: data.display_name,
+          campaign: data.campaign,
           created_at: data.created_at,
           updated_at: data.updated_at
         }
@@ -171,46 +172,48 @@ export const useAuth = () => {
   }
 
   const isAdmin = () => {
-    return user?.role === 'admin' || user?.role === 'Administrador' || user?.username === 'wegneycosta' || user?.role === 'Felipe Admin' || user?.username === 'felipe'
+    return user?.role === 'admin' || user?.role === 'Administrador' || user?.username === 'wegneycosta' || user?.username === 'felipe' || user?.username === 'adminsaude' || user?.username === 'admin20'
   }
 
   const isFelipeAdmin = () => {
-    return user?.username === 'felipe' || user?.role === 'Felipe Admin'
+    return user?.username === 'felipe'
   }
 
+
   const isFullAdmin = () => {
-    return isAdmin() && !isFelipeAdmin()
+    return isAdmin() && user?.username !== 'felipe'
   }
 
   const isMembro = () => {
-    return user?.role === 'Membro' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || isFelipeAdmin()
+    return user?.role === 'Membro' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || user?.username === 'felipe'
   }
 
   const isAmigo = () => {
-    return user?.role === 'Amigo' || user?.role === 'Membro' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || isFelipeAdmin()
+    return user?.role === 'Amigo' || user?.role === 'Membro' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || user?.username === 'felipe'
   }
 
   const isConvidado = () => {
-    return user?.role === 'Convidado' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || isFelipeAdmin()
+    return user?.role === 'Convidado' || user?.role === 'admin' || user?.role === 'Administrador' || user?.role === 'Convidado' || user?.username === 'wegneycosta' || user?.username === 'felipe'
   }
 
   const canViewAllUsers = () => {
-    return isAdmin() || isFelipeAdmin()
+    return isAdmin()
   }
 
   const canViewOwnUsers = () => {
-    return isAdmin() || isConvidado() || isMembro() || isAmigo() || isFelipeAdmin()
+    return isAdmin() || isConvidado() || isMembro() || isAmigo()
   }
 
   const canViewStats = () => {
-    return isAdmin() || isMembro() || isConvidado() || isFelipeAdmin()
+    return isAdmin() || isMembro() || isConvidado()
   }
 
   const canGenerateLinks = () => {
-    return isAdmin() || isMembro() || isConvidado() || isAmigo() || isFelipeAdmin()
+    return isAdmin() || isMembro() || isConvidado() || isAmigo()
   }
 
   const canDeleteUsers = () => {
+    // Permitir exclusão para administradores completos (excluir felipe)
     return isFullAdmin()
   }
 
@@ -219,8 +222,9 @@ export const useAuth = () => {
   }
 
   const canExportReports = () => {
-    return isAdmin() || isMembro() || isConvidado() || isFelipeAdmin()
+    return isAdmin() || isMembro() || isConvidado()
   }
+
 
   return {
     user,

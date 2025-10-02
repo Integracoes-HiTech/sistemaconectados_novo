@@ -16,16 +16,18 @@ export interface UserLink {
   updated_at: string
   deleted_at?: string | null
   user_data?: AuthUser
+  created_by?: string
+  campaign?: string
 }
 
-export const useUserLinks = (userId?: string) => {
+export const useUserLinks = (userId?: string, campaign?: string) => {
   const [userLinks, setUserLinks] = useState<UserLink[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUserLinks()
-  }, [userId])
+  }, [userId, campaign])
 
   const fetchUserLinks = async () => {
     try {
@@ -45,6 +47,11 @@ export const useUserLinks = (userId?: string) => {
       // Se userId for fornecido, filtrar por usuário
       if (userId) {
         query = query.eq('user_id', userId)
+      }
+      
+      // Se campaign for fornecida, filtrar por campanha
+      if (campaign) {
+        query = query.eq('campaign', campaign)
       }
 
       const { data, error } = await query
@@ -123,10 +130,24 @@ export const useUserLinks = (userId?: string) => {
         // Erro ao buscar configuração de tipo de links, usando padrão
       }
 
-      // Definir tipo de link baseado na configuração do sistema (padrão: 'members')
-      const linkType = settingsData?.setting_value || 'members'
+      // IMPORTANTE: Links novos SEMPRE começam como 'members' por padrão
+      // Administradores podem alterar o tipo global posteriormente em Settings
+      const linkType = 'members'
       
-      // Criando link com tipo
+      // Buscar campanha do usuário que está criando o link
+      const { data: userData, error: userError } = await supabase
+        .from('auth_users')
+        .select('campaign')
+        .eq('id', userId)
+        .single()
+
+      if (userError) {
+        // Erro ao buscar campanha do usuário, usando padrão
+      }
+
+      const userCampaign = userData?.campaign || 'A'
+      
+      // Criando link com tipo e campanha
 
       const { data, error } = await supabase
         .from('user_links')
@@ -138,7 +159,8 @@ export const useUserLinks = (userId?: string) => {
           is_active: true,
           click_count: 0,
           registration_count: 0,
-          link_type: linkType
+          link_type: linkType,
+          campaign: userCampaign
         }])
         .select()
 
