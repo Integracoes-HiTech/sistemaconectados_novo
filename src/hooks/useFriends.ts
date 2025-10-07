@@ -8,6 +8,7 @@ export interface Friend {
   name: string
   phone: string
   instagram: string
+  cep?: string | null // ← Adicionar campo CEP (opcional)
   city: string
   sector: string
   referrer: string
@@ -17,6 +18,7 @@ export interface Friend {
   couple_name: string
   couple_phone: string
   couple_instagram: string
+  couple_cep?: string | null // ← Adicionar CEP do parceiro (opcional)
   couple_city: string
   couple_sector: string
   // Campos específicos do sistema de amigos (mesma lógica de membros)

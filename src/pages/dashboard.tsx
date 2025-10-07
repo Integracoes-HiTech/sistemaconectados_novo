@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   Phone,
   Mail,
   Instagram,
+  User,
   User as UserIcon,
   MapPin,
   Building,
@@ -28,7 +29,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Tag
 } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useStats } from "@/hooks/useStats";
@@ -41,6 +43,13 @@ import { useFriendsRanking } from "@/hooks/useFriendsRanking";
 import type { FriendRanking } from "@/hooks/useFriendsRanking";
 import { useExportReports } from "@/hooks/useExportReports";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
+import { useSaudePeople } from "@/hooks/useSaudePeople";
+import type { SaudePerson } from "@/hooks/useSaudePeople";
+import { useCampaigns } from "@/hooks/useCampaigns";
+import type { Campaign } from "@/hooks/useCampaigns";
+import { useAdmins } from "@/hooks/useAdmins";
+import type { AdminUser } from "@/hooks/useAdmins";
+import { supabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   
@@ -59,13 +68,75 @@ export default function Dashboard() {
   const [friendsFilterCity, setFriendsFilterCity] = useState("");
   const [friendsFilterSector, setFriendsFilterSector] = useState("");
   
+  // Filtros para pessoas de saúde (admin3)
+  const [saudeSearchTerm, setSaudeSearchTerm] = useState("");
+  const [saudePhoneSearchTerm, setSaudePhoneSearchTerm] = useState("");
+  const [saudeLeaderFilter, setSaudeLeaderFilter] = useState("");
+  
   // Estados de paginação
   const [membersCurrentPage, setMembersCurrentPage] = useState(1);
   const [friendsCurrentPage, setFriendsCurrentPage] = useState(1);
+  const [saudePeopleCurrentPage, setSaudePeopleCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50); // 50 itens por página para melhor performance com grandes volumes
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user, logout, isAdmin, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+  const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+
+  // Estado para armazenar cores da campanha do banco
+  const [campaignColors, setCampaignColors] = useState<{
+    background: string;
+    primary: string;
+    secondary: string;
+  } | null>(null);
+
+  // Buscar cores da campanha do banco
+  useEffect(() => {
+    const fetchCampaignColors = async () => {
+      if (!user?.campaign) {
+        console.log('⚠️ Usuário ou campanha não definidos ainda');
+        return;
+      }
+      
+      console.log('🔍 Buscando cores para a campanha:', user.campaign);
+      
+      try {
+        const { data, error } = await supabase
+          .from('campaigns')
+          .select('background_color, primary_color, secondary_color')
+          .eq('code', user.campaign)
+          .single();
+        
+        if (error) {
+          console.error('❌ Erro na query do Supabase:', error);
+          throw error;
+        }
+        
+        if (data) {
+          console.log('✅ Cores da campanha carregadas do banco:', data);
+          console.log('📦 Dados recebidos:', JSON.stringify(data, null, 2));
+          
+          setCampaignColors({
+            background: data.background_color,
+            primary: data.primary_color,
+            secondary: data.secondary_color
+          });
+          
+          console.log('🎨 Cores configuradas no estado:', {
+            background: data.background_color,
+            primary: data.primary_color,
+            secondary: data.secondary_color
+          });
+        } else {
+          console.warn('⚠️ Nenhum dado retornado para a campanha:', user.campaign);
+        }
+      } catch (err) {
+        console.error('❌ Erro ao buscar cores da campanha:', err);
+        // Não definir fallback aqui - deixar NULL para forçar o uso do fallback inline
+      }
+    };
+    
+    fetchCampaignColors();
+  }, [user?.campaign]);
 
   // Configuração de cores por campanha
   const getCampaignTheme = () => {
@@ -181,6 +252,186 @@ export default function Dashboard() {
     }
   };
 
+  // Função para remover pessoa de saúde (soft delete - admin3)
+  const handleRemoveSaudePerson = async (personId: string, personName: string) => {
+    if (!isAdmin3()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas admin3 pode remover pessoas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmRemove = window.confirm(
+      `Tem certeza que deseja excluir "${personName}"?`
+    );
+
+    if (!confirmRemove) return;
+
+    try {
+      const success = await softDeleteSaudePerson(personId);
+      
+      if (success) {
+        toast({
+          title: "✅ Pessoa excluída",
+          description: `"${personName}" foi excluído(a) com sucesso.`,
+        });
+      } else {
+        throw new Error("Erro ao excluir pessoa");
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Erro ao excluir",
+        description: error instanceof Error ? error.message : "Erro ao excluir pessoa",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Função para editar pessoa de saúde - navega para PublicRegisterSaude com dados
+  const handleEditSaudePerson = (person: SaudePerson) => {
+    if (!isAdmin3()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas admin3 pode editar pessoas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navegar para a página de cadastro com os dados da pessoa para edição
+    navigate('/cadastro-saude', { 
+      state: { 
+        editMode: true, 
+        personData: person 
+      } 
+    });
+  };
+
+  // Funções para AdminHitech - Gerenciar Campanhas
+  const handleEditCampaign = (campaign: Campaign) => {
+    if (!isAdminHitech()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas AdminHitech pode editar campanhas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navegar para a página de edição de campanha com os dados
+    navigate('/cadastro-campanha', { 
+      state: { 
+        editMode: true, 
+        campaignData: campaign 
+      } 
+    });
+  };
+
+  const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
+    if (!isAdminHitech()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas AdminHitech pode excluir campanhas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Tem certeza que deseja excluir a campanha "${campaignName}"? Esta ação não pode ser desfeita.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const result = await deleteCampaign(campaignId);
+      
+      if (result.success) {
+        toast({
+          title: "✅ Campanha excluída",
+          description: `A campanha "${campaignName}" foi excluída com sucesso.`,
+        });
+      } else {
+        throw new Error(result.error || "Erro ao excluir campanha");
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Erro ao excluir",
+        description: error instanceof Error ? error.message : "Erro ao excluir campanha",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Funções para AdminHitech - Gerenciar Admins
+  const handleDeleteAdmin = async (adminId: string, adminUsername: string) => {
+    if (!isAdminHitech()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas AdminHitech pode excluir admins.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Tem certeza que deseja excluir o admin "${adminUsername}"? Esta ação não pode ser desfeita.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const result = await deleteAdmin(adminId);
+      
+      if (result.success) {
+        toast({
+          title: "✅ Admin excluído",
+          description: `O admin "${adminUsername}" foi excluído com sucesso.`,
+        });
+      } else {
+        throw new Error(result.error || "Erro ao excluir admin");
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Erro ao excluir",
+        description: error instanceof Error ? error.message : "Erro ao excluir admin",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleAdminStatus = async (adminId: string, adminUsername: string, currentStatus: boolean) => {
+    if (!isAdminHitech()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas AdminHitech pode alterar status de admins.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await toggleAdminStatus(adminId, currentStatus);
+      
+      if (result.success) {
+        toast({
+          title: "✅ Status atualizado",
+          description: `O admin "${adminUsername}" foi ${!currentStatus ? 'ativado' : 'desativado'} com sucesso.`,
+        });
+      } else {
+        throw new Error(result.error || "Erro ao atualizar status");
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Erro ao atualizar",
+        description: error instanceof Error ? error.message : "Erro ao atualizar status",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Lógica de filtro por referrer:
   // Admin veem todos os usuários (sem filtro)
   // - Outros roles: vê apenas usuários que eles indicaram (filtro por user.full_name)
@@ -242,6 +493,28 @@ export default function Dashboard() {
     activatePaidContractsPhase,
     updateMemberLinksType
   } = useSystemSettings();
+
+  // Hook para pessoas da campanha de saúde (sempre chamar, mas só usar se admin3)
+  const { 
+    people: saudePeople, 
+    loading: saudePeopleLoading,
+    softDeletePerson: softDeleteSaudePerson,
+    updateSaudePerson
+  } = useSaudePeople();
+
+  // Hooks para AdminHitech - Campanhas e Admins
+  const {
+    campaigns,
+    loading: campaignsLoading,
+    deleteCampaign
+  } = useCampaigns();
+
+  const {
+    admins,
+    loading: adminsLoading,
+    deleteAdmin,
+    toggleAdminStatus
+  } = useAdmins();
 
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
@@ -379,14 +652,41 @@ export default function Dashboard() {
     return data.slice(startIndex, endIndex);
   };
 
+  // Filtrar pessoas de saúde (admin3)
+  const filteredSaudePeople = saudePeople.filter(person => {
+    const matchesSearch = saudeSearchTerm === "" || 
+      person.leader_name.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
+      person.leader_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
+      person.person_name.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
+      person.person_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
+      person.observation.toLowerCase().includes(saudeSearchTerm.toLowerCase());
+
+    const matchesPhone = saudePhoneSearchTerm === "" || 
+      person.leader_whatsapp.includes(saudePhoneSearchTerm) ||
+      person.person_whatsapp.includes(saudePhoneSearchTerm);
+
+    const matchesLeader = saudeLeaderFilter === "" || 
+      person.leader_name.toLowerCase().includes(saudeLeaderFilter.toLowerCase());
+
+    return matchesSearch && matchesPhone && matchesLeader;
+  }).sort((a, b) => {
+    // Ordenar por data de criação (mais recente primeiro)
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
   // Dados paginados
   const paginatedMembers = getPaginatedData(filteredMembers, membersCurrentPage);
   const paginatedFriends = getPaginatedData(filteredFriends, friendsCurrentPage);
+  const paginatedSaudePeople = filteredSaudePeople.slice(
+    (saudePeopleCurrentPage - 1) * itemsPerPage,
+    saudePeopleCurrentPage * itemsPerPage
+  );
 
   
   // Total de páginas
   const totalMembersPages = getTotalPages(filteredMembers.length);
   const totalFriendsPages = getTotalPages(filteredFriends.length);
+  const totalSaudePeoplePages = getTotalPages(filteredSaudePeople.length);
 
   // Funções para navegar entre páginas
   const goToMembersPage = (page: number) => {
@@ -395,6 +695,10 @@ export default function Dashboard() {
 
   const goToFriendsPage = (page: number) => {
     setFriendsCurrentPage(Math.max(1, Math.min(page, totalFriendsPages)));
+  };
+
+  const goToSaudePeoplePage = (page: number) => {
+    setSaudePeopleCurrentPage(Math.max(1, Math.min(page, totalSaudePeoplePages)));
   };
 
   // Resetar paginação quando filtros mudarem
@@ -406,11 +710,18 @@ export default function Dashboard() {
     setFriendsCurrentPage(1);
   };
 
+  const resetSaudePeoplePagination = () => {
+    setSaudePeopleCurrentPage(1);
+  };
+
 
   // Loading state
   if (usersLoading || statsLoading || reportsLoading || linksLoading || membersLoading || settingsLoading) {
     return (
-      <div className={`min-h-screen ${user?.campaign === 'B' ? 'bg-blue-100' : 'bg-institutional-blue'} flex items-center justify-center`}>
+      <div 
+        className="min-h-screen flex items-center justify-center" 
+        style={{ backgroundColor: campaignColors?.background || '#14446C' }}
+      >
         <div className="text-center">
           <div className={`w-8 h-8 border-2 ${user?.campaign === 'B' ? 'border-institutional-gold' : 'border-institutional-gold'} border-t-transparent rounded-full animate-spin mx-auto mb-4`} />
           <p className="text-white">Carregando dados do banco...</p>
@@ -420,7 +731,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={`min-h-screen ${user?.campaign === 'B' ? 'bg-blue-100' : 'bg-institutional-blue'}`}>
+    <div 
+      className="min-h-screen" 
+      style={{ backgroundColor: campaignColors?.background || '#14446C' }}
+    >
       {/* Header Personalizado */}
       <header className={`bg-white shadow-md border-b-2 ${user?.campaign === 'B' ? 'border-institutional-gold' : 'border-institutional-gold'}`}>
         <div className="container mx-auto px-4 py-4">
@@ -452,7 +766,11 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className={`text-2xl font-bold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
-              Dashboard - Sistema de Gestão Conectados
+              {isAdminHitech() 
+                ? 'Hitech - Sistema de Gestão Conectados' 
+                : isAdmin3() 
+                ? 'Dashboard - Sistema Conectados' 
+                : 'Dashboard - Sistema de Gestão Conectados'}
                 {isAdmin() && (
                 <span className={`ml-2 text-sm px-2 py-1 rounded-full ${user?.campaign === 'B' ? 'bg-red-100 text-red-800' : 'bg-red-100 text-red-800'}`}>
                     {user?.username === 'wegneycosta' ? 'VEREADOR' : 
@@ -462,23 +780,51 @@ export default function Dashboard() {
                 )}
             </h1>
             <p className="text-muted-foreground mt-1">
-                {isAdminUser
+                {isAdminHitech()
+                ? "Gerencie o sistema e suas funcionalidades"
+                : isAdmin3()
+                ? "Gerencie sua rede de pessoas da área da saúde"
+                : isAdminUser
                 ? "Visão geral completa do sistema - Todos os usuários e dados consolidados"
                 : "Gerencie sua rede de membros e acompanhe resultados"
               }
             </p>
           </div>
           
-            {(canGenerateLinks() || isAdminUser) && (
+            {isAdminHitech() && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={() => navigate('/cadastro-campanha')}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium"
+            >
+              <Tag className="w-4 h-4 mr-2" />
+              Cadastrar Nova Campanha
+            </Button>
+          </div>
+            )}
+
+            {isAdmin3() && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={() => navigate('/cadastro-saude')}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium"
+            >
+              <User className="w-4 h-4 mr-2" />
+              Cadastrar Nova Pessoa
+            </Button>
+          </div>
+            )}
+            
+            {(canGenerateLinks() || isAdminUser) && !isAdmin3() && !isAdminHitech() && (
           <div className="flex flex-col sm:flex-row gap-3">
             {canGenerateLinks() && (
-              <Button
-                onClick={generateLink}
+            <Button
+              onClick={generateLink}
                 className={`${user?.campaign === 'B' ? 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue' : 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue'} font-medium`}
-              >
-                <Share2 className="w-4 h-4 mr-2" />
+            >
+              <Share2 className="w-4 h-4 mr-2" />
                 Gerar e Copiar Link
-              </Button>
+            </Button>
             )}
             
             
@@ -540,12 +886,12 @@ export default function Dashboard() {
                         // Empate: membro mais antigo primeiro
                         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
                       })
-                      .slice(0, 5)
+                        .slice(0, 5)
                       .map((member, index) => ({ 
-                        position: index + 1, 
+                          position: index + 1, 
                         member: member.name, 
                         count: member.contracts_completed 
-                      }));
+                        }));
 
                     exportReportDataToPDF(reportData as unknown as Record<string, unknown>, memberStats as unknown as Record<string, unknown>, topMembersData);
                     toast({
@@ -985,8 +1331,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção para Membros Não-Administradores */}
-        {!isAdmin() && settings?.member_links_type === 'members' && (
+        {/* Seção para Membros Não-Administradores (exceto admin3 e AdminHitech) */}
+        {!isAdmin() && !isAdmin3() && !isAdminHitech() && settings?.member_links_type === 'members' && (
           <div className="mb-8">
             {/* Informações sobre Amigos */}
             <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6">
@@ -1896,6 +2242,486 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         )}
+
+        {/* Seção de Pessoas de Saúde - Admin3 */}
+        {isAdmin3() && (
+        <Card className="shadow-[var(--shadow-card)] mt-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-institutional-blue">
+              <User className="w-5 h-5" />
+              Pessoas Cadastradas
+            </CardTitle>
+            <CardDescription>
+              Lista completa de todas as pessoas cadastradas da saúde
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Filtros para Pessoas de Saúde */}
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Pesquisar por qualquer campo..."
+                  value={saudeSearchTerm}
+                  onChange={(e) => {
+                    setSaudeSearchTerm(e.target.value);
+                    resetSaudePeoplePagination();
+                  }}
+                  className="pl-10 border-institutional-light focus:border-institutional-gold focus:ring-institutional-gold"
+                />
+              </div>
+
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Pesquisar por telefone..."
+                  value={saudePhoneSearchTerm}
+                  onChange={(e) => {
+                    setSaudePhoneSearchTerm(e.target.value);
+                    resetSaudePeoplePagination();
+                  }}
+                  className="pl-10 border-institutional-light focus:border-institutional-gold focus:ring-institutional-gold"
+                />
+              </div>
+
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Filtrar por líder..."
+                  value={saudeLeaderFilter}
+                  onChange={(e) => {
+                    setSaudeLeaderFilter(e.target.value);
+                    resetSaudePeoplePagination();
+                  }}
+                  className="pl-10 border-institutional-light focus:border-institutional-gold focus:ring-institutional-gold"
+                />
+              </div>
+            </div>
+
+            {/* Tabela de Pessoas de Saúde */}
+            <div className="overflow-x-auto" id="saude-people-table">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-institutional-light">
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Observações</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedSaudePeople.map((person) => (
+                    <tr key={person.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
+                            <UserIcon className="w-4 h-4 text-institutional-gold" />
+                          </div>
+                          <span className="font-medium text-institutional-blue">{person.leader_name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">{person.leader_whatsapp}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">{person.leader_cep || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <UserIcon className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <span className="font-medium text-blue-600">{person.person_name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">{person.person_whatsapp}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">{person.person_cep || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-gray-600 line-clamp-2" title={person.observation}>
+                          {person.observation}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {new Date(person.created_at).toLocaleDateString('pt-BR')}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditSaudePerson(person)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                          >
+                            <Settings className="w-4 h-4 mr-1" />
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRemoveSaudePerson(person.id, person.person_name)}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            <UserIcon className="w-4 h-4 mr-1" />
+                            Excluir
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {filteredSaudePeople.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <p>Nenhuma pessoa encontrada com os critérios de pesquisa.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Paginação para Pessoas de Saúde */}
+            {filteredSaudePeople.length > 0 && (
+              <div className="flex items-center justify-between mt-6 px-4">
+                <div className="text-sm text-muted-foreground">
+                  Mostrando {((saudePeopleCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(saudePeopleCurrentPage * itemsPerPage, filteredSaudePeople.length)} de {filteredSaudePeople.length} pessoas
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSaudePeoplePage(1)}
+                    disabled={saudePeopleCurrentPage === 1}
+                    className="border-institutional-light hover:bg-institutional-light"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSaudePeoplePage(saudePeopleCurrentPage - 1)}
+                    disabled={saudePeopleCurrentPage === 1}
+                    className="border-institutional-light hover:bg-institutional-light"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalSaudePeoplePages) }, (_, i) => {
+                      const pageNum = Math.max(1, Math.min(totalSaudePeoplePages - 4, saudePeopleCurrentPage - 2)) + i;
+                      if (pageNum > totalSaudePeoplePages) return null;
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === saudePeopleCurrentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => goToSaudePeoplePage(pageNum)}
+                          className={pageNum === saudePeopleCurrentPage 
+                            ? "bg-institutional-gold text-institutional-blue hover:bg-institutional-gold/90" 
+                            : "border-institutional-light hover:bg-institutional-light"
+                          }
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSaudePeoplePage(saudePeopleCurrentPage + 1)}
+                    disabled={saudePeopleCurrentPage === totalSaudePeoplePages}
+                    className="border-institutional-light hover:bg-institutional-light"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToSaudePeoplePage(totalSaudePeoplePages)}
+                    disabled={saudePeopleCurrentPage === totalSaudePeoplePages}
+                    className="border-institutional-light hover:bg-institutional-light"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+          </CardContent>
+        </Card>
+        )}
+
+        {/* ========================================= */}
+        {/* SEÇÃO ADMINHITECH - TABELAS DE GERENCIAMENTO */}
+        {/* ========================================= */}
+        
+        {/* Tabela de Campanhas - AdminHitech */}
+        {isAdminHitech() && (
+          <Card className="shadow-[var(--shadow-card)] mt-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <Tag className="w-5 h-5" />
+                Campanhas Cadastradas
+              </CardTitle>
+              <CardDescription>
+                Lista de todas as campanhas do sistema
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {campaignsLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Carregando campanhas...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-institutional-light">
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Código</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Primária</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Secundária</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Accent</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor de Fundo</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {campaigns.map((campaign) => (
+                        <tr key={campaign.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-medium text-institutional-blue">{campaign.name}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
+                              {campaign.code}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-6 h-6 rounded border border-gray-300"
+                                style={{ backgroundColor: campaign.primary_color }}
+                              />
+                              <span className="text-xs text-gray-600">{campaign.primary_color}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-6 h-6 rounded border border-gray-300"
+                                style={{ backgroundColor: campaign.secondary_color }}
+                              />
+                              <span className="text-xs text-gray-600">{campaign.secondary_color}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-6 h-6 rounded border border-gray-300"
+                                style={{ backgroundColor: campaign.accent_color }}
+                              />
+                              <span className="text-xs text-gray-600">{campaign.accent_color}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-6 h-6 rounded border border-gray-300"
+                                style={{ backgroundColor: campaign.background_color }}
+                              />
+                              <span className="text-xs text-gray-600">{campaign.background_color}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              campaign.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {campaign.is_active ? 'Ativa' : 'Inativa'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">
+                              {new Date(campaign.created_at).toLocaleDateString('pt-BR')}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditCampaign(campaign)}
+                                className="border-institutional-gold text-institutional-blue hover:bg-institutional-light"
+                              >
+                                <Settings className="w-4 h-4 mr-1" />
+                                Editar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                              >
+                                <UserIcon className="w-4 h-4 mr-1" />
+                                Excluir
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {campaigns.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Tag className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                      <p>Nenhuma campanha cadastrada ainda.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tabela de Admins - AdminHitech */}
+        {isAdminHitech() && (
+          <Card className="shadow-[var(--shadow-card)] mt-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <UserCheck className="w-5 h-5" />
+                Administradores do Sistema
+              </CardTitle>
+              <CardDescription>
+                Lista de todos os administradores cadastrados
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {adminsLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Carregando administradores...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-institutional-light">
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Username</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome Completo</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Campanha</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {admins.map((admin) => (
+                        <tr key={admin.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-medium text-institutional-blue">@{admin.username}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm">{admin.name}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">{admin.full_name}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
+                              {admin.campaign}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              admin.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {admin.is_active ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">
+                              {new Date(admin.created_at).toLocaleDateString('pt-BR')}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleToggleAdminStatus(admin.id, admin.username, admin.is_active)}
+                                className={admin.is_active ? 'border-red-300 text-red-600 hover:bg-red-50' : 'border-green-300 text-green-600 hover:bg-green-50'}
+                              >
+                                {admin.is_active ? 'Desativar' : 'Ativar'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteAdmin(admin.id, admin.username)}
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                              >
+                                <UserIcon className="w-4 h-4 mr-1" />
+                                Excluir
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {admins.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <UserCheck className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                      <p>Nenhum administrador cadastrado ainda.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
       </main>
     </div>
   );

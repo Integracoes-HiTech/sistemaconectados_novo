@@ -175,6 +175,14 @@ export const useAuth = () => {
     return user?.role === 'admin' || user?.role === 'Administrador' || user?.username === 'wegneycosta' || user?.username === 'felipe' || user?.username === 'adminsaude' || user?.username === 'admin20'
   }
 
+  const isAdmin3 = () => {
+    return user?.role === 'admin3'
+  }
+
+  const isAdminHitech = () => {
+    return user?.role === 'AdminHitech' || user?.username === 'AdminHitech'
+  }
+
   const isFelipeAdmin = () => {
     return user?.username === 'felipe'
   }
@@ -233,6 +241,8 @@ export const useAuth = () => {
     logout,
     isAuthenticated,
     isAdmin,
+    isAdmin3,
+    isAdminHitech,
     isFelipeAdmin,
     isFullAdmin,
     isMembro,

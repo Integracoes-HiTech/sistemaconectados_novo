@@ -776,6 +776,7 @@ export default function PublicRegister() {
           name: formData.name.trim(),
           phone: formData.phone,
           instagram: formData.instagram.trim(),
+          cep: formData.cep ? limparCep(formData.cep) : null, // ← Adicionar CEP limpo (somente números)
           city: formData.city.trim(),
           sector: formData.sector.trim(),
           referrer: formData.referrer,
@@ -786,6 +787,7 @@ export default function PublicRegister() {
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
           couple_instagram: formData.couple_instagram.trim(),
+          couple_cep: formData.couple_cep ? limparCep(formData.couple_cep) : null, // ← Adicionar CEP do parceiro
           couple_city: formData.couple_city.trim(),
           couple_sector: formData.couple_sector.trim(),
           // Campos obrigatórios para tabela friends
@@ -825,6 +827,7 @@ export default function PublicRegister() {
           name: formData.name.trim(),
           phone: formData.phone,
           instagram: formData.instagram.trim(),
+          cep: formData.cep ? limparCep(formData.cep) : null, // ← Adicionar CEP limpo (somente números)
           city: formData.city.trim(),
           sector: formData.sector.trim(),
           referrer: formData.referrer,
@@ -835,6 +838,7 @@ export default function PublicRegister() {
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
           couple_instagram: formData.couple_instagram.trim(),
+          couple_cep: formData.couple_cep ? limparCep(formData.couple_cep) : null, // ← Adicionar CEP do parceiro
           couple_city: formData.couple_city.trim(),
           couple_sector: formData.couple_sector.trim()
         };
