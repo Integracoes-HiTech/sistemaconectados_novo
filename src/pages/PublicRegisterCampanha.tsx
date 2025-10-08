@@ -130,7 +130,6 @@ export default function PublicRegisterCampanha() {
     try {
       if (editMode && campaignData) {
         // MODO DE EDIÇÃO - Atualizar campanha existente
-        console.log('📝 Atualizando campanha:', campaignData.id);
 
         const { data: updatedCampaign, error: updateError } = await supabase
           .from('campaigns')
@@ -149,8 +148,6 @@ export default function PublicRegisterCampanha() {
         if (updateError) {
           throw updateError;
         }
-
-        console.log('✅ Campanha atualizada:', updatedCampaign);
         
         setIsSuccess(true);
         toast({
@@ -191,10 +188,6 @@ export default function PublicRegisterCampanha() {
         const password = `${nomeLimpo.substring(0, 10)}${formData.code}`;
         const displayName = formData.name.split(' ')[0];
 
-        console.log('🔐 Gerando credenciais do admin...');
-        console.log('Username:', username);
-        console.log('Password:', password);
-
         // PASSO 2: Criar o admin na tabela auth_users (com permissões completas)
         const { data: newAdmin, error: adminError } = await supabase
           .from('auth_users')
@@ -214,11 +207,8 @@ export default function PublicRegisterCampanha() {
           .single();
 
         if (adminError) {
-          console.error('❌ Erro ao criar admin:', adminError);
           throw new Error(`Erro ao criar admin: ${adminError.message}`);
         }
-
-        console.log('✅ Admin criado com sucesso:', newAdmin);
 
         // PASSO 3: Criar a nova campanha (sem admin_user_id - pode ter vários admins)
         const { data: newCampaign, error: insertError } = await supabase
@@ -238,13 +228,10 @@ export default function PublicRegisterCampanha() {
           .single();
 
         if (insertError) {
-          console.error('❌ Erro ao criar campanha:', insertError);
           // ROLLBACK: Deletar o admin se a campanha falhar
           await supabase.from('auth_users').delete().eq('id', newAdmin.id);
           throw new Error(`Erro ao criar campanha: ${insertError.message}`);
         }
-
-        console.log('✅ Campanha cadastrada com sucesso:', newCampaign);
         
         // Salvar credenciais para exibir na tela de sucesso
         setCreatedCredentials({ username, password });
@@ -258,7 +245,6 @@ export default function PublicRegisterCampanha() {
       }
 
     } catch (error) {
-      console.error('❌ Erro ao salvar campanha:', error);
       toast({
         title: "Erro ao salvar",
         description: error instanceof Error ? error.message : "Ocorreu um erro. Tente novamente.",
@@ -292,7 +278,6 @@ export default function PublicRegisterCampanha() {
           });
         }
       } catch (error) {
-        console.error('Erro ao fazer login:', error);
         toast({
           title: "Erro ao fazer login",
           description: "Tente fazer login manualmente na tela inicial.",

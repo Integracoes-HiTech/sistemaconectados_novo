@@ -95,11 +95,8 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchCampaignColors = async () => {
       if (!user?.campaign) {
-        console.log('⚠️ Usuário ou campanha não definidos ainda');
         return;
       }
-      
-      console.log('🔍 Buscando cores para a campanha:', user.campaign);
       
       try {
         const { data, error } = await supabase
@@ -109,31 +106,18 @@ export default function Dashboard() {
           .single();
         
         if (error) {
-          console.error('❌ Erro na query do Supabase:', error);
           throw error;
         }
-        
+
         if (data) {
-          console.log('✅ Cores da campanha carregadas do banco:', data);
-          console.log('📦 Dados recebidos:', JSON.stringify(data, null, 2));
-          
           setCampaignColors({
             background: data.background_color,
             primary: data.primary_color,
             secondary: data.secondary_color
           });
-          
-          console.log('🎨 Cores configuradas no estado:', {
-            background: data.background_color,
-            primary: data.primary_color,
-            secondary: data.secondary_color
-          });
-        } else {
-          console.warn('⚠️ Nenhum dado retornado para a campanha:', user.campaign);
         }
       } catch (err) {
-        console.error('❌ Erro ao buscar cores da campanha:', err);
-        // Não definir fallback aqui - deixar NULL para forçar o uso do fallback inline
+        // Silently fail - usar fallback inline
       }
     };
     
@@ -359,7 +343,6 @@ export default function Dashboard() {
         });
       }
     } catch (error) {
-      console.error('Erro ao alternar status da campanha:', error);
       toast({
         title: "Erro ao alterar status",
         description: "Ocorreu um erro inesperado.",
@@ -566,18 +549,7 @@ export default function Dashboard() {
   };
 
   const generateLink = async () => {
-    console.log('🔗 generateLink chamado');
-    console.log('👤 Dados do usuário:', {
-      id: user?.id,
-      username: user?.username,
-      role: user?.role,
-      full_name: user?.full_name,
-      campaign: user?.campaign,
-      is_active: user?.is_active
-    });
-    
     if (!user?.id || !user?.full_name) {
-      console.error('❌ Falta user.id ou user.full_name');
       toast({
         title: "Erro",
         description: "Usuário não encontrado. Faça login novamente.",
@@ -586,9 +558,7 @@ export default function Dashboard() {
       return;
     }
 
-    console.log('✅ Chamando createLink...');
     const result = await createLink(user.id, user.full_name);
-    console.log('🔗 Resultado createLink:', result);
     
     if (result.success && result.data) {
       const newLink = `${window.location.origin}/cadastro/${result.data.link_id}`;

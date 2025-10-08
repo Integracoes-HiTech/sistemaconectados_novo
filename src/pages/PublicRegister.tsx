@@ -671,14 +671,11 @@ export default function PublicRegister() {
     if (!linkId || hasFetchedData.current) return;
     
     hasFetchedData.current = true;
-    console.log('🔍 Buscando dados do link:', linkId);
       
       try {
         const result = await getUserByLinkId(linkId);
-        console.log('📊 Resultado getUserByLinkId:', result);
         
         if (result.success && result.data) {
-          console.log('✅ Link válido, dados carregados');
           setLinkData(result.data);
           setReferrerData(result.data.user_data);
           setFormData(prev => ({ 
@@ -691,18 +688,14 @@ export default function PublicRegister() {
           // Incrementar contador de cliques quando o link for acessado
           await incrementClickCount(linkId);
         } else {
-          console.warn('⚠️ Resultado não tem success ou data:', result);
-          
           // VERIFICAR SE TEM ERRO DE DESATIVAÇÃO OU LINK NÃO ENCONTRADO
           if (result.error) {
             const errorMessage = result.error;
-            console.log('🔍 Verificando erro:', errorMessage);
             
             if (errorMessage.includes('desativado') || 
                 errorMessage.includes('inativo') || 
                 errorMessage.includes('não encontrado') ||
                 errorMessage.includes('não está mais disponível')) {
-              console.warn('🚫 LINK DESATIVADO/INVÁLIDO DETECTADO!');
               setIsLinkDeactivated(true);
               setLinkDeactivationMessage(
                 errorMessage.includes('não encontrado') 
@@ -717,17 +710,13 @@ export default function PublicRegister() {
           setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
         }
       } catch (error) {
-        console.error('❌ Erro no catch:', error);
-        
         // VERIFICAR SE O ERRO É POR LINK DESATIVADO
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-        console.log('🔍 Mensagem de erro:', errorMessage);
         
         if (errorMessage.includes('desativado') || 
             errorMessage.includes('inativo') ||
             errorMessage.includes('não encontrado') ||
             errorMessage.includes('não está mais disponível')) {
-          console.warn('🚫 LINK DESATIVADO/INVÁLIDO DETECTADO NO CATCH!');
           setIsLinkDeactivated(true);
           setLinkDeactivationMessage(
             errorMessage.includes('não encontrado') 
@@ -736,7 +725,6 @@ export default function PublicRegister() {
           );
           return; // NÃO fazer fallback
         } else {
-          console.log('⚠️ Outro tipo de erro, usando fallback');
           // Outro tipo de erro - fallback normal
           setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
         }
