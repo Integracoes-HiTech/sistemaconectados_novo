@@ -292,6 +292,12 @@
     const loadingDiv = document.getElementById('loading');
     
     try {
+      // Verificar se o Supabase está configurado
+      if (!supabase) {
+        loadingDiv.innerHTML = '<p style="color: red;">❌ Erro: Supabase não inicializado</p>';
+        return;
+      }
+
       // Buscar membros ativos da campanha B com CEP (principal OU do cônjuge)
       const { data: membros, error } = await supabase
         .from('members')
@@ -301,7 +307,19 @@
         .or('cep.not.is.null,couple_cep.not.is.null');
 
       if (error) {
-        loadingDiv.innerHTML = '<p style="color: red;">❌ Erro ao carregar dados</p>';
+        loadingDiv.innerHTML = `
+          <p style="color: red; font-weight: bold;">❌ Erro ao carregar dados do mapa</p>
+          <p style="font-size: 12px; color: #666; margin-top: 8px;">${error.message}</p>
+          <p style="font-size: 11px; color: #999; margin-top: 4px;">Verifique sua conexão com a internet</p>
+        `;
+        return;
+      }
+
+      if (!membros || membros.length === 0) {
+        loadingDiv.innerHTML = `
+          <p style="color: #f59e0b; font-weight: bold;">⚠️ Nenhum membro encontrado</p>
+          <p style="font-size: 12px; color: #666; margin-top: 8px;">Não há membros cadastrados com CEP na Campanha B</p>
+        `;
         return;
       }
 
@@ -483,13 +501,41 @@
       loadingDiv.classList.add('hidden');
 
     } catch (error) {
-      loadingDiv.innerHTML = '<p style="color: red;">❌ Erro ao carregar mapa</p>';
+      loadingDiv.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+          <p style="color: red; font-weight: bold; font-size: 16px;">❌ Erro ao carregar o mapa</p>
+          <p style="font-size: 13px; color: #666; margin-top: 12px;">Detalhes técnicos:</p>
+          <p style="font-size: 12px; color: #999; margin-top: 4px; font-family: monospace;">${error.message || 'Erro desconhecido'}</p>
+          <hr style="margin: 16px 0; border: none; border-top: 1px solid #ddd;">
+          <p style="font-size: 12px; color: #666;">Possíveis causas:</p>
+          <ul style="font-size: 11px; color: #999; text-align: left; margin: 8px auto; max-width: 400px;">
+            <li>Falha na conexão com o banco de dados (Supabase)</li>
+            <li>APIs externas bloqueadas (ViaCEP, Nominatim)</li>
+            <li>Problema de CORS ou firewall</li>
+            <li>Conexão com a internet instável</li>
+          </ul>
+        </div>
+      `;
     }
   }
 
   // 6) Iniciar carregamento quando a página carregar
   window.addEventListener('load', () => {
-    carregarMembrosNoMapa();
+    // Adicionar timeout para detectar erros de carregamento
+    const timeout = setTimeout(() => {
+      const loadingDiv = document.getElementById('loading');
+      if (loadingDiv && !loadingDiv.classList.contains('hidden')) {
+        loadingDiv.innerHTML = `
+          <p style="color: #f59e0b; font-weight: bold;">⏳ Carregamento lento...</p>
+          <p style="font-size: 12px; color: #666; margin-top: 8px;">O mapa está demorando mais do que o esperado</p>
+          <p style="font-size: 11px; color: #999; margin-top: 4px;">Aguarde ou recarregue a página</p>
+        `;
+      }
+    }, 30000); // 30 segundos
+
+    carregarMembrosNoMapa().finally(() => {
+      clearTimeout(timeout);
+    });
   });
 </script>
 
