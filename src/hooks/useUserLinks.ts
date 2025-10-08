@@ -119,6 +119,8 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
 
   const createUserLink = async (userId: string, linkId: string, referrerName: string, expiresAt?: string) => {
     try {
+      console.log('🔗 createUserLink chamado:', { userId, linkId, referrerName, expiresAt });
+      
       // Buscar configuração do sistema para definir o tipo de link
       const { data: settingsData, error: settingsError } = await supabase
         .from('system_settings')
@@ -127,11 +129,12 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         .single()
 
       if (settingsError) {
-        // Erro ao buscar configuração de tipo de links, usando padrão
+        console.error('⚠️ Erro ao buscar configuração de tipo de links:', settingsError);
       }
 
       // Usar o tipo de link configurado no sistema (default: 'members')
       const linkType = settingsData?.setting_value || 'members'
+      console.log('🔗 Tipo de link definido:', linkType);
       
       // Buscar campanha do usuário que está criando o link
       const { data: userData, error: userError } = await supabase
@@ -141,12 +144,23 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         .single()
 
       if (userError) {
-        // Erro ao buscar campanha do usuário, usando padrão
+        console.error('⚠️ Erro ao buscar campanha do usuário:', userError);
       }
 
       const userCampaign = userData?.campaign || 'A'
+      console.log('🔗 Campanha do usuário:', userCampaign);
       
-      // Criando link com tipo e campanha
+      console.log('🔗 Inserindo link no banco:', {
+        user_id: userId,
+        link_id: linkId,
+        referrer_name: referrerName,
+        expires_at: expiresAt,
+        is_active: true,
+        click_count: 0,
+        registration_count: 0,
+        link_type: linkType,
+        campaign: userCampaign
+      });
 
       const { data, error } = await supabase
         .from('user_links')
@@ -163,7 +177,12 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         }])
         .select()
 
-      if (error) throw error
+      console.log('🔗 Resultado da inserção:', { data, error });
+
+      if (error) {
+        console.error('❌ Erro ao inserir link:', error);
+        throw error;
+      }
 
       if (data) {
         setUserLinks(prev => [data[0], ...prev])

@@ -526,7 +526,18 @@ export default function Dashboard() {
   };
 
   const generateLink = async () => {
+    console.log('🔗 generateLink chamado');
+    console.log('👤 Dados do usuário:', {
+      id: user?.id,
+      username: user?.username,
+      role: user?.role,
+      full_name: user?.full_name,
+      campaign: user?.campaign,
+      is_active: user?.is_active
+    });
+    
     if (!user?.id || !user?.full_name) {
+      console.error('❌ Falta user.id ou user.full_name');
       toast({
         title: "Erro",
         description: "Usuário não encontrado. Faça login novamente.",
@@ -535,7 +546,9 @@ export default function Dashboard() {
       return;
     }
 
+    console.log('✅ Chamando createLink...');
     const result = await createLink(user.id, user.full_name);
+    console.log('🔗 Resultado createLink:', result);
     
     if (result.success && result.data) {
       const newLink = `${window.location.origin}/cadastro/${result.data.link_id}`;
@@ -964,6 +977,30 @@ export default function Dashboard() {
                     Gerenciar Configurações
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Mapa Interativo - Apenas Campanha B */}
+        {user?.campaign === 'B' && (
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6 overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <MapPin className="w-5 h-5" />
+                Mapa Interativo
+              </CardTitle>
+              <CardDescription>
+                Visualização geográfica da Campanha B
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="w-full h-[600px]">
+                <iframe
+                  src="/mapas/mapa.html"
+                  title="Mapa Interativo"
+                  className="w-full h-full border-0"
+                />
               </div>
             </CardContent>
           </Card>
@@ -2594,15 +2631,6 @@ export default function Dashboard() {
                                 <Settings className="w-4 h-4 mr-1" />
                                 Editar
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
-                                className="bg-red-600 hover:bg-red-700 text-white"
-                              >
-                                <UserIcon className="w-4 h-4 mr-1" />
-                                Excluir
-                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -2693,15 +2721,6 @@ export default function Dashboard() {
                                 className={admin.is_active ? 'border-red-300 text-red-600 hover:bg-red-50' : 'border-green-300 text-green-600 hover:bg-green-50'}
                               >
                                 {admin.is_active ? 'Desativar' : 'Ativar'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteAdmin(admin.id, admin.username)}
-                                className="bg-red-600 hover:bg-red-700 text-white"
-                              >
-                                <UserIcon className="w-4 h-4 mr-1" />
-                                Excluir
                               </Button>
                             </div>
                           </td>

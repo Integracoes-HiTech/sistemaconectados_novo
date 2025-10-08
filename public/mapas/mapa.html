@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Mapa de Membros - Campanha B</title>
+
+    <!-- Folha de estilo para ocupar toda a tela -->
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      
+      #map {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        text-align: center;
+      }
+
+      #loading.hidden {
+        display: none;
+      }
+    </style>
+
+    <!-- Import do Leaflet (CSS e JS) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+	
+	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+	<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="loading">
+  <p>🗺️ Carregando mapa...</p>
+  <p style="font-size: 12px; color: #666;">Buscando coordenadas dos membros...</p>
+</div>
+
+<div id="map"></div>
+
+<script>
+  // Configuração do Supabase
+  const SUPABASE_URL = 'https://zveysullpsdopcwsncai.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y';
+  
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 1) Inicializa o mapa (SEM controle de atribuição)
+  const map = L.map('map', {
+    attributionControl: false  // Remove o "Leaflet" do canto
+  }).setView([-14.2350, -51.9253], 4);
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
+  // Criar grupo de cluster para os marcadores
+  const markers = L.markerClusterGroup();
+
+  // 2) Função para gerar pequeno deslocamento (evitar sobreposição)
+  const gerarJitter = () => (Math.random() - 0.5) * 0.001;
+
+  // 2.5) Cache de coordenadas por CEP (com versão para forçar limpeza)
+  const CACHE_VERSION = 'v5'; // Incrementar para limpar cache antigo
+  const cacheCoords = {};
+  
+  // 2.6) Função para gerar cor por município
+  const coresPorMunicipio = {};
+  const cores = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+    '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788',
+    '#E76F51', '#2A9D8F', '#E9C46A', '#F4A261', '#264653'
+  ];
+  
+  function getCorPorMunicipio(cidade) {
+    if (!cidade) return '#3B82F6'; // Azul padrão
+      
+    const cidadeLimpa = cidade.trim().toUpperCase();
+    
+    if (!coresPorMunicipio[cidadeLimpa]) {
+      const index = Object.keys(coresPorMunicipio).length % cores.length;
+      coresPorMunicipio[cidadeLimpa] = cores[index];
+    }
+    
+    return coresPorMunicipio[cidadeLimpa];
+  }
+
+  // 3) Função para buscar coordenadas do CEP
+  async function buscarCoordenadasPorCEP(cep) {
+    if (!cep) return null;
+    
+    try {
+      // Limpar CEP (remover traços e espaços)
+      const cepLimpo = cep.replace(/\D/g, '');
+      
+      console.log(`🔍 Buscando coordenadas para CEP: ${cepLimpo}`);
+      
+      // MÉTODO 1: Buscar endereço via ViaCEP
+      const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const viaCepData = await viaCepResponse.json();
+      
+      if (viaCepData.erro) {
+        console.warn(`⚠️ CEP ${cepLimpo} não encontrado no ViaCEP`);
+        return null;
+      }
+      
+      console.log(`✅ ViaCEP retornou:`, viaCepData);
+      
+      // MÉTODO 2: Buscar coordenadas via Nominatim com ENDEREÇO COMPLETO
+      const logradouro = viaCepData.logradouro || '';
+      const bairro = viaCepData.bairro || '';
+      const cidade = viaCepData.localidade;
+      const estado = viaCepData.uf;
+      
+      // ESTRATÉGIA: Priorizar BAIRRO ao invés de endereço completo
+      // Motivo: OpenStreetMap não tem todas as ruas numeradas de Goiânia mapeadas
+      // Ex: Rua 226 → retorna Rua 209 (errado), mas "Setor Coimbra" → retorna correto
+      
+      let queryNominatim, nominatimUrl;
+      
+      if (bairro) {
+        // TENTAR BAIRRO + CIDADE primeiro (mais confiável para Goiânia)
+        queryNominatim = `${bairro}, ${cidade}, ${estado}, Brazil`;
+        nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
+          `q=${encodeURIComponent(queryNominatim)}&` +
+          `format=json&` +
+          `limit=1&` +
+          `addressdetails=1&` +
+          `countrycodes=br`;
+        
+        console.log(`🔍 Buscando no Nominatim (BAIRRO PRIORITÁRIO): ${queryNominatim}`);
+      } else {
+        // Se não tem bairro, tentar endereço completo
+        const partes = [];
+        if (logradouro) partes.push(logradouro);
+        partes.push(cidade);
+        partes.push(estado);
+        partes.push('Brazil');
+        
+        queryNominatim = partes.join(', ');
+        nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
+          `q=${encodeURIComponent(queryNominatim)}&` +
+          `format=json&` +
+          `limit=1&` +
+          `addressdetails=1&` +
+          `countrycodes=br`;
+        
+        console.log(`🔍 Buscando no Nominatim (SEM BAIRRO): ${queryNominatim}`);
+      }
+      
+      const nominatimResponse = await fetch(nominatimUrl, {
+        headers: {
+          'User-Agent': 'SistemaConectados/1.0'
+        }
+      });
+      
+      const nominatimData = await nominatimResponse.json();
+      
+      if (nominatimData && nominatimData.length > 0) {
+        // Montar endereço de exibição (prioriza bairro se não tem logradouro confiável)
+        let enderecoExibir = '';
+        if (bairro) {
+          enderecoExibir = bairro; // Prioriza bairro (mais confiável)
+        } else if (logradouro) {
+          enderecoExibir = logradouro;
+        }
+        
+        const coords = {
+          lat: parseFloat(nominatimData[0].lat),
+          lon: parseFloat(nominatimData[0].lon),
+          cidade: `${cidade} - ${estado}`,
+          bairro: bairro,
+          logradouro: logradouro,
+          endereco_completo: enderecoExibir
+        };
+        
+        console.log(`✅ Coordenadas encontradas (bairro prioritário):`, coords);
+        return coords;
+      }
+      
+      // FALLBACK 1: Se não encontrou com endereço completo, tenta BAIRRO + CIDADE
+      if (bairro) {
+        console.warn(`⚠️ Não encontrou com endereço completo. Tentando bairro + cidade...`);
+        
+        const fallbackBairroQuery = `${bairro}, ${cidade}, ${estado}, Brazil`;
+        const fallbackBairroUrl = `https://nominatim.openstreetmap.org/search?` +
+          `q=${encodeURIComponent(fallbackBairroQuery)}&` +
+          `format=json&` +
+          `limit=1&` +
+          `countrycodes=br`;
+        
+        console.log(`🔍 FALLBACK BAIRRO - Buscando: ${fallbackBairroQuery}`);
+        
+        const fallbackBairroResponse = await fetch(fallbackBairroUrl, {
+          headers: {
+            'User-Agent': 'SistemaConectados/1.0'
+          }
+        });
+        
+        const fallbackBairroData = await fallbackBairroResponse.json();
+        
+        if (fallbackBairroData && fallbackBairroData.length > 0) {
+          const coords = {
+            lat: parseFloat(fallbackBairroData[0].lat),
+            lon: parseFloat(fallbackBairroData[0].lon),
+            cidade: `${cidade} - ${estado}`,
+            bairro: bairro,
+            logradouro: logradouro,
+            endereco_completo: `${bairro}`.trim()
+          };
+          
+          console.log(`✅ Coordenadas encontradas (fallback bairro):`, coords);
+          return coords;
+        }
+      }
+      
+      // FALLBACK 2: Se não encontrou com bairro, tenta só com cidade
+      console.warn(`⚠️ Não encontrou com bairro. Tentando apenas cidade...`);
+      
+      const fallbackQuery = `${cidade}, ${estado}, Brazil`;
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?` +
+        `q=${encodeURIComponent(fallbackQuery)}&` +
+        `format=json&` +
+        `limit=1&` +
+        `countrycodes=br`;
+      
+      console.log(`🔍 FALLBACK - Buscando: ${fallbackQuery}`);
+      
+      const fallbackResponse = await fetch(fallbackUrl, {
+        headers: {
+          'User-Agent': 'SistemaConectados/1.0'
+        }
+      });
+      
+      const fallbackData = await fallbackResponse.json();
+      
+      if (fallbackData && fallbackData.length > 0) {
+        const coords = {
+          lat: parseFloat(fallbackData[0].lat),
+          lon: parseFloat(fallbackData[0].lon),
+          cidade: `${cidade} - ${estado}`,
+          bairro: bairro,
+          logradouro: logradouro,
+          endereco_completo: `${logradouro}, ${bairro}`.trim().replace(/^,\s*/, '')
+        };
+        
+        console.log(`✅ Coordenadas encontradas (fallback - cidade):`, coords);
+        return coords;
+      }
+      
+      console.warn(`⚠️ Nominatim não retornou coordenadas nem para ${fallbackQuery}`);
+      return null;
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar coordenadas do CEP:', cep, error);
+      return null;
+    }
+  }
+
+  // 4) Função para buscar coordenadas via cache/batch (otimizado com VERSÃO)
+  const cepCache = {};
+  
+  async function buscarCoordenadasComCache(cep) {
+    if (!cep) return null;
+    
+    const cepLimpo = cep.replace(/\D/g, '');
+    const cacheKey = `${CACHE_VERSION}_${cepLimpo}`;
+    
+    // Verificar cache com versão (ignora cache antigo)
+    if (cepCache[cacheKey]) {
+      console.log(`💾 Cache HIT para CEP ${cepLimpo} (${CACHE_VERSION})`);
+      return cepCache[cacheKey];
+    }
+    
+    console.log(`🔄 Cache MISS para CEP ${cepLimpo} - buscando...`);
+    
+    // Buscar coordenadas
+    const coords = await buscarCoordenadasPorCEP(cep);
+    
+    // Salvar no cache com versão
+    if (coords) {
+      cepCache[cacheKey] = coords;
+      console.log(`💾 Salvou no cache: ${cacheKey}`);
+    }
+    
+    return coords;
+  }
+
+  // 5) Função principal para carregar e exibir membros no mapa
+  async function carregarMembrosNoMapa() {
+    const loadingDiv = document.getElementById('loading');
+    
+    try {
+      // Buscar membros ativos da campanha B com CEP (principal OU do cônjuge)
+      const { data: membros, error } = await supabase
+        .from('members')
+        .select('id, name, couple_name, cep, couple_cep, city, couple_city, phone, couple_phone, instagram, couple_instagram, status, campaign')
+        .eq('campaign', 'B')
+        .eq('status', 'Ativo')
+        .or('cep.not.is.null,couple_cep.not.is.null');
+
+      if (error) {
+        console.error('Erro ao buscar membros:', error);
+        loadingDiv.innerHTML = '<p style="color: red;">❌ Erro ao carregar dados</p>';
+        return;
+      }
+
+      console.log(`📍 ${membros.length} membros encontrados`);
+      console.log('Membros:', membros);
+      
+      // Processar membros (buscar coordenadas)
+      let processados = 0;
+      let marcadoresCriados = 0;
+      const total = membros.length;
+
+      for (const membro of membros) {
+        processados++;
+        loadingDiv.innerHTML = `
+          <p>🗺️ Processando membros...</p>
+          <p style="font-size: 12px; color: #666;">${processados} de ${total}</p>
+        `;
+
+        // Array para armazenar os CEPs únicos da dupla
+        const cepsParaProcessar = [];
+        
+        // VERIFICAR se ambos têm o MESMO CEP (moram juntos)
+        const mesmoCep = membro.cep && membro.couple_cep && 
+                        membro.cep.replace(/\D/g, '') === membro.couple_cep.replace(/\D/g, '');
+        
+        if (mesmoCep) {
+          // DUPLA NO MESMO ENDEREÇO - criar 1 marcador com ambos
+          cepsParaProcessar.push({
+            cep: membro.cep,
+            pessoa: membro.name,
+            phone: membro.phone,
+            instagram: membro.instagram,
+            // Dados do parceiro
+            couplePessoa: membro.couple_name,
+            couplePhone: membro.couple_phone,
+            coupleInstagram: membro.couple_instagram,
+            isMesmoCep: true  // Flag para criar card conjunto
+          });
+        } else {
+          // CEPS DIFERENTES - criar marcadores separados
+          
+          // Adicionar CEP principal se existir
+          if (membro.cep && membro.cep.trim() !== '') {
+            cepsParaProcessar.push({
+              cep: membro.cep,
+              pessoa: membro.name,
+              phone: membro.phone,
+              instagram: membro.instagram,
+              isDupla: !!membro.couple_name,
+              parceiro: membro.couple_name
+            });
+          }
+          
+          // Adicionar CEP do cônjuge se existir E for diferente do CEP principal
+          if (membro.couple_cep && membro.couple_cep.trim() !== '') {
+            cepsParaProcessar.push({
+              cep: membro.couple_cep,
+              pessoa: membro.couple_name || `Parceiro(a) de ${membro.name}`,
+              phone: membro.couple_phone,
+              instagram: membro.couple_instagram,
+              isDupla: true,
+              parceiro: membro.name
+            });
+          }
+        }
+
+        // Processar cada CEP (pode ser 1 ou 2 marcadores)
+        for (const item of cepsParaProcessar) {
+          console.log(`📍 Processando: ${item.pessoa} - CEP: ${item.cep}`);
+          
+          const coords = await buscarCoordenadasComCache(item.cep);
+          
+          if (coords) {
+            // Adicionar jitter para evitar sobreposição
+            const lat = coords.lat + gerarJitter();
+            const lon = coords.lon + gerarJitter();
+
+            console.log(`✅ Marcador criado: ${item.pessoa} em ${coords.cidade} (${lat}, ${lon})`);
+
+            // Pegar cor baseada na cidade OU usar ROXO para duplas no mesmo CEP
+            const corMarcador = item.isMesmoCep ? '#9333EA' : getCorPorMunicipio(coords.cidade);
+
+            // Montar endereço completo para exibição
+            const enderecoExibicao = coords.endereco_completo || 
+                                     (coords.bairro ? `${coords.bairro}, ${coords.cidade}` : coords.cidade);
+            
+            // Criar popup melhorado com ENDEREÇO COMPLETO
+            let popup;
+            
+            if (item.isMesmoCep) {
+              // POPUP PARA DUPLA NO MESMO CEP (mostra os 2)
+              popup = `
+                <div style="font-family: 'Segoe UI', sans-serif; min-width: 300px; padding: 8px;">
+                  <div style="background: ${corMarcador}; color: white; padding: 10px; margin: -8px -8px 12px -8px; border-radius: 4px 4px 0 0;">
+                    <h3 style="margin: 0; font-size: 16px;">👫 Dupla no Mesmo Local</h3>
+                  </div>
+                  <div style="line-height: 1.6; font-size: 14px;">
+                    <p style="margin: 8px 0;"><strong>📍 Endereço:</strong><br>${enderecoExibicao}</p>
+                    <p style="margin: 8px 0;"><strong>📮 CEP:</strong> ${item.cep}</p>
+                    
+                    <hr style="margin: 12px 0; border: none; border-top: 1px solid #ddd;">
+                    
+                    <p style="margin: 8px 0;"><strong>👤 Pessoa 1:</strong> ${item.pessoa}</p>
+                    ${item.phone ? `<p style="margin: 4px 0; padding-left: 16px;"><strong>📱</strong> ${item.phone}</p>` : ''}
+                    ${item.instagram ? `<p style="margin: 4px 0; padding-left: 16px;"><strong>📷</strong> ${item.instagram.startsWith('@') ? item.instagram : '@' + item.instagram}</p>` : ''}
+                    
+                    <p style="margin: 8px 0;"><strong>👤 Pessoa 2:</strong> ${item.couplePessoa}</p>
+                    ${item.couplePhone ? `<p style="margin: 4px 0; padding-left: 16px;"><strong>📱</strong> ${item.couplePhone}</p>` : ''}
+                    ${item.coupleInstagram ? `<p style="margin: 4px 0; padding-left: 16px;"><strong>📷</strong> ${item.coupleInstagram.startsWith('@') ? item.coupleInstagram : '@' + item.coupleInstagram}</p>` : ''}
+                  </div>
+                </div>
+              `;
+            } else {
+              // POPUP PARA PESSOA INDIVIDUAL
+              popup = `
+                <div style="font-family: 'Segoe UI', sans-serif; min-width: 280px; padding: 8px;">
+                  <div style="background: ${corMarcador}; color: white; padding: 10px; margin: -8px -8px 12px -8px; border-radius: 4px 4px 0 0;">
+                    <h3 style="margin: 0; font-size: 16px;">👤 ${item.pessoa}</h3>
+                    ${item.isDupla ? `<p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">💑 Dupla com: ${item.parceiro}</p>` : ''}
+                  </div>
+                  <div style="line-height: 1.6; font-size: 14px;">
+                    <p style="margin: 8px 0;"><strong>📍 Endereço:</strong><br>${enderecoExibicao}</p>
+                    <p style="margin: 8px 0;"><strong>📮 CEP:</strong> ${item.cep}</p>
+                    ${item.phone ? `<p style="margin: 8px 0;"><strong>📱 WhatsApp:</strong><br>${item.phone}</p>` : ''}
+                    ${item.instagram ? `<p style="margin: 8px 0;"><strong>📷 Instagram:</strong><br>${item.instagram.startsWith('@') ? item.instagram : '@' + item.instagram}</p>` : ''}
+                  </div>
+                </div>
+              `;
+            }
+
+            // Criar ícone colorido
+            const iconHtml = `
+              <div style="
+                background-color: ${corMarcador};
+                width: 25px;
+                height: 25px;
+                border-radius: 50% 50% 50% 0;
+                transform: rotate(-45deg);
+                border: 3px solid white;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+              "></div>
+            `;
+
+            const customIcon = L.divIcon({
+              html: iconHtml,
+              className: 'custom-marker',
+              iconSize: [25, 25],
+              iconAnchor: [12, 24],
+              popupAnchor: [0, -24]
+            });
+
+            // Criar marcador
+            const marker = L.marker([lat, lon], { icon: customIcon })
+              .bindPopup(popup);
+
+            // Adicionar evento de clique para dar zoom
+            marker.on('click', function() {
+              // Centralizar e dar zoom no marcador clicado
+              map.setView([lat, lon], 15, {
+                animate: true,
+                duration: 0.5
+              });
+            });
+
+            // Adicionar ao grupo de cluster
+            markers.addLayer(marker);
+            marcadoresCriados++;
+          } else {
+            console.warn(`❌ Não foi possível encontrar coordenadas para ${item.pessoa} (CEP: ${item.cep})`);
+          }
+        }
+
+        // Pequeno delay para não sobrecarregar a API
+        if (processados % 5 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      // Adicionar todos os marcadores ao mapa
+      map.addLayer(markers);
+
+      // Ajustar zoom para mostrar todos os marcadores
+      if (markers.getLayers().length > 0) {
+        map.fitBounds(markers.getBounds(), { padding: [50, 50] });
+      }
+
+      // Esconder loading
+      loadingDiv.classList.add('hidden');
+
+      console.log(`✅ RESUMO:`);
+      console.log(`   - Membros processados: ${processados}`);
+      console.log(`   - Marcadores criados: ${marcadoresCriados}`);
+      console.log(`   - Marcadores no mapa: ${markers.getLayers().length}`);
+
+    } catch (error) {
+      console.error('Erro geral:', error);
+      loadingDiv.innerHTML = '<p style="color: red;">❌ Erro ao carregar mapa</p>';
+    }
+  }
+
+  // 6) Iniciar carregamento quando a página carregar
+  window.addEventListener('load', () => {
+    carregarMembrosNoMapa();
+  });
+</script>
+
+</body>
+</html>
