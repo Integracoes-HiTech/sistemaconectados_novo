@@ -72,6 +72,10 @@ export default function PublicRegister() {
   const [coupleInstagramValidationError, setCoupleInstagramValidationError] = useState<string | null>(null);
   const [isCoupleInstagramValid, setIsCoupleInstagramValid] = useState(false);
   
+  // Estado para link desativado
+  const [isLinkDeactivated, setIsLinkDeactivated] = useState(false);
+  const [linkDeactivationMessage, setLinkDeactivationMessage] = useState<string>("");
+  
   const { addUser, checkUserExists } = useUsers();
   const { getUserByLinkId, incrementClickCount } = useUserLinks();
   const { createUserWithCredentials } = useCredentials();
@@ -667,10 +671,14 @@ export default function PublicRegister() {
     if (!linkId || hasFetchedData.current) return;
     
     hasFetchedData.current = true;
+    console.log('🔍 Buscando dados do link:', linkId);
       
       try {
         const result = await getUserByLinkId(linkId);
+        console.log('📊 Resultado getUserByLinkId:', result);
+        
         if (result.success && result.data) {
+          console.log('✅ Link válido, dados carregados');
           setLinkData(result.data);
           setReferrerData(result.data.user_data);
           setFormData(prev => ({ 
@@ -683,12 +691,55 @@ export default function PublicRegister() {
           // Incrementar contador de cliques quando o link for acessado
           await incrementClickCount(linkId);
         } else {
+          console.warn('⚠️ Resultado não tem success ou data:', result);
+          
+          // VERIFICAR SE TEM ERRO DE DESATIVAÇÃO OU LINK NÃO ENCONTRADO
+          if (result.error) {
+            const errorMessage = result.error;
+            console.log('🔍 Verificando erro:', errorMessage);
+            
+            if (errorMessage.includes('desativado') || 
+                errorMessage.includes('inativo') || 
+                errorMessage.includes('não encontrado') ||
+                errorMessage.includes('não está mais disponível')) {
+              console.warn('🚫 LINK DESATIVADO/INVÁLIDO DETECTADO!');
+              setIsLinkDeactivated(true);
+              setLinkDeactivationMessage(
+                errorMessage.includes('não encontrado') 
+                  ? 'Este link não foi encontrado ou não está mais disponível.' 
+                  : errorMessage
+              );
+              return; // NÃO fazer fallback
+            }
+          }
+          
           // Fallback se não encontrar no banco
           setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
         }
       } catch (error) {
-        // Erro ao buscar dados do referrer
-        setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
+        console.error('❌ Erro no catch:', error);
+        
+        // VERIFICAR SE O ERRO É POR LINK DESATIVADO
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+        console.log('🔍 Mensagem de erro:', errorMessage);
+        
+        if (errorMessage.includes('desativado') || 
+            errorMessage.includes('inativo') ||
+            errorMessage.includes('não encontrado') ||
+            errorMessage.includes('não está mais disponível')) {
+          console.warn('🚫 LINK DESATIVADO/INVÁLIDO DETECTADO NO CATCH!');
+          setIsLinkDeactivated(true);
+          setLinkDeactivationMessage(
+            errorMessage.includes('não encontrado') 
+              ? 'Este link não foi encontrado ou não está mais disponível.' 
+              : errorMessage
+          );
+          return; // NÃO fazer fallback
+        } else {
+          console.log('⚠️ Outro tipo de erro, usando fallback');
+          // Outro tipo de erro - fallback normal
+          setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
+        }
       }
   }, [linkId, getUserByLinkId, incrementClickCount, navigate]);
 
@@ -1033,6 +1084,79 @@ export default function PublicRegister() {
         {/* Rodapé */}
         <div className="text-center text-white text-sm">
           <p>Todos os direitos reservados HitechDesenvolvimento 2025</p>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA DE LINK DESATIVADO
+  if (isLinkDeactivated) {
+    return (
+      <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
+        {/* Logo no topo */}
+        <div className="mb-8">
+          <Logo size="lg" showText={true} layout="vertical" textColor="white" />
+        </div>
+
+        {/* Card de Link Desativado */}
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-2xl p-8 text-center">
+            {/* Ícone de Bloqueio */}
+            <div className="mb-6">
+              <div className="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center">
+                <svg 
+                  className="w-10 h-10 text-red-600" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" 
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Título */}
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              Link Desativado
+            </h1>
+
+            {/* Mensagem */}
+            <p className="text-gray-600 mb-6">
+              {linkDeactivationMessage || 'Este link de cadastro foi desativado e não está mais disponível.'}
+            </p>
+
+            {/* Informações adicionais */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-700">
+                <strong>Possíveis razões:</strong>
+              </p>
+              <ul className="text-sm text-gray-600 mt-2 text-left list-disc list-inside">
+                <li>O proprietário do link foi desativado</li>
+                <li>A campanha foi encerrada</li>
+                <li>O link expirou ou foi removido</li>
+              </ul>
+            </div>
+
+            {/* Botão para voltar */}
+            <button
+              onClick={() => window.location.href = '/'}
+              className="w-full bg-institutional-blue text-white py-3 px-4 rounded-lg font-semibold hover:bg-institutional-blue/90 transition-colors"
+            >
+              Voltar para a Página Inicial
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center mt-6">
+            <p className="text-white text-sm">
+              Entre em contato com o administrador para mais informações.
+            </p>
+          </div>
         </div>
       </div>
     );

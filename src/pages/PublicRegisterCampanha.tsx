@@ -53,8 +53,8 @@ export default function PublicRegisterCampanha() {
   };
 
   const validateCode = (code: string) => {
-    const codeRegex = /^[A-Z0-9]+$/;
-    return code.length >= 1 && code.length <= 10 && codeRegex.test(code);
+    // Aceita letras (maiúsculas ou minúsculas), números, sem limite de caracteres
+    return code.trim().length >= 1;
   };
 
   const validateColor = (color: string) => {
@@ -65,7 +65,7 @@ export default function PublicRegisterCampanha() {
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      [field]: field === 'code' ? value.toUpperCase() : value
+      [field]: value // Aceita minúsculas e maiúsculas
     }));
     
     // Limpar erro do campo quando o usuário começar a digitar
@@ -89,7 +89,7 @@ export default function PublicRegisterCampanha() {
     if (!formData.code.trim()) {
       errors.code = "Código da campanha é obrigatório";
     } else if (!validateCode(formData.code)) {
-      errors.code = "Use apenas letras maiúsculas e números (máx. 10 caracteres)";
+      errors.code = "Código inválido";
     }
 
     if (!validateColor(formData.primaryColor)) {

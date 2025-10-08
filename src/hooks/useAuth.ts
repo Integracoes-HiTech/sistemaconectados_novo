@@ -38,13 +38,16 @@ export const useAuth = () => {
     try {
       const { data, error } = await supabase
         .from('auth_users')
-        .select('id, username, role, is_active, display_name, campaign')
+        .select('id, username, role, is_active, display_name, campaign, deleted_at')
         .eq('id', userData.id)
         .eq('username', userData.username)
         .single()
 
-      if (error || !data || !data.is_active) {
-        console.warn('🚨 Sessão inválida, fazendo logout...')
+      if (error || !data || !data.is_active || data.deleted_at) {
+        console.warn('🚨 Sessão inválida ou usuário desativado, fazendo logout...')
+        if (data?.deleted_at) {
+          console.warn('❌ Usuário com soft delete (deleted_at preenchido)')
+        }
         localStorage.removeItem('loggedUser')
         setUser(null)
         return
@@ -88,6 +91,29 @@ export const useAuth = () => {
       if (error) throw error
 
       if (data) {
+        // VERIFICAR SE USUÁRIO FOI DESATIVADO (SOFT DELETE)
+        if (data.deleted_at) {
+          console.warn('❌ Tentativa de login de usuário desativado:', normalizedUsername);
+          toast({
+            title: "Acesso bloqueado",
+            description: "Sua conta foi desativada. Entre em contato com o administrador.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return false;
+        }
+
+        // VERIFICAR SE USUÁRIO ESTÁ INATIVO
+        if (!data.is_active) {
+          console.warn('❌ Tentativa de login de usuário inativo:', normalizedUsername);
+          toast({
+            title: "Acesso bloqueado",
+            description: "Sua conta está inativa. Entre em contato com o administrador.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return false;
+        }
         // Ativar usuário após login bem-sucedido
         await supabase
           .from('auth_users')

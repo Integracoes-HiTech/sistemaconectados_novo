@@ -30,7 +30,9 @@ import {
   ChevronLeft,
   ChevronsLeft,
   ChevronsRight,
-  Tag
+  Tag,
+  XCircle,
+  CheckCircle
 } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useStats } from "@/hooks/useStats";
@@ -329,6 +331,43 @@ export default function Dashboard() {
     });
   };
 
+  const handleToggleCampaignStatus = async (campaign: Campaign) => {
+    if (!isAdminHitech()) {
+      toast({
+        title: "Acesso negado",
+        description: "Apenas AdminHitech pode alterar status de campanhas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = await toggleCampaignStatus(campaign.code, campaign.is_active);
+      
+      if (result.success) {
+        toast({
+          title: campaign.is_active ? "✅ Campanha desativada!" : "✅ Campanha reativada!",
+          description: campaign.is_active 
+            ? `A campanha "${campaign.name}" e todos seus usuários foram desativados.`
+            : `A campanha "${campaign.name}" e todos seus usuários foram reativados.`,
+        });
+      } else {
+        toast({
+          title: "Erro ao alterar status",
+          description: result.error || "Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao alternar status da campanha:', error);
+      toast({
+        title: "Erro ao alterar status",
+        description: "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
     if (!isAdminHitech()) {
       toast({
@@ -503,10 +542,11 @@ export default function Dashboard() {
   } = useSaudePeople();
 
   // Hooks para AdminHitech - Campanhas e Admins
-  const {
-    campaigns,
+  const { 
+    campaigns, 
     loading: campaignsLoading,
-    deleteCampaign
+    deleteCampaign,
+    toggleCampaignStatus
   } = useCampaigns();
 
   const {
@@ -2561,9 +2601,23 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {campaigns.map((campaign) => (
-                        <tr key={campaign.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
+                        <tr 
+                          key={campaign.id} 
+                          className={`border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors ${
+                            !campaign.is_active ? 'opacity-50 bg-gray-50' : ''
+                          }`}
+                        >
                           <td className="py-3 px-4">
-                            <span className="font-medium text-institutional-blue">{campaign.name}</span>
+                            <span className={`font-medium text-institutional-blue ${
+                              !campaign.is_active ? 'line-through text-gray-400' : ''
+                            }`}>
+                              {campaign.name}
+                            </span>
+                            {!campaign.is_active && (
+                              <span className="ml-2 text-xs text-red-500 font-semibold">
+                                (DESATIVADA)
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
@@ -2625,12 +2679,36 @@ export default function Dashboard() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleEditCampaign(campaign)}
-                                className="border-institutional-gold text-institutional-blue hover:bg-institutional-light"
+                                onClick={() => handleToggleCampaignStatus(campaign)}
+                                className={`border ${
+                                  campaign.is_active 
+                                    ? 'border-red-500 text-red-600 hover:bg-red-50' 
+                                    : 'border-green-500 text-green-600 hover:bg-green-50'
+                                }`}
                               >
-                                <Settings className="w-4 h-4 mr-1" />
-                                Editar
+                                {campaign.is_active ? (
+                                  <>
+                                    <XCircle className="w-4 h-4 mr-1" />
+                                    Desativar
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle className="w-4 h-4 mr-1" />
+                                    Ativar
+                                  </>
+                                )}
                               </Button>
+                              {campaign.is_active && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditCampaign(campaign)}
+                                  className="border-institutional-gold text-institutional-blue hover:bg-institutional-light"
+                                >
+                                  <Settings className="w-4 h-4 mr-1" />
+                                  Editar
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2678,20 +2756,41 @@ export default function Dashboard() {
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Campanha</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {admins.map((admin) => (
-                        <tr key={admin.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
+                        <tr 
+                          key={admin.id} 
+                          className={`border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors ${
+                            !admin.is_active || admin.deleted_at ? 'opacity-50 bg-gray-50' : ''
+                          }`}
+                        >
                           <td className="py-3 px-4">
-                            <span className="font-medium text-institutional-blue">@{admin.username}</span>
+                            <span className={`font-medium text-institutional-blue ${
+                              !admin.is_active || admin.deleted_at ? 'line-through text-gray-400' : ''
+                            }`}>
+                              @{admin.username}
+                            </span>
+                            {(!admin.is_active || admin.deleted_at) && (
+                              <span className="ml-2 text-xs text-red-500 font-semibold">
+                                (DESATIVADO)
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-sm">{admin.name}</span>
+                            <span className={`text-sm ${
+                              !admin.is_active || admin.deleted_at ? 'line-through text-gray-400' : ''
+                            }`}>
+                              {admin.name}
+                            </span>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-sm text-gray-600">{admin.full_name}</span>
+                            <span className={`text-sm text-gray-600 ${
+                              !admin.is_active || admin.deleted_at ? 'line-through' : ''
+                            }`}>
+                              {admin.full_name}
+                            </span>
                           </td>
                           <td className="py-3 px-4">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
@@ -2711,18 +2810,6 @@ export default function Dashboard() {
                             <span className="text-sm text-gray-600">
                               {new Date(admin.created_at).toLocaleDateString('pt-BR')}
                             </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleToggleAdminStatus(admin.id, admin.username, admin.is_active)}
-                                className={admin.is_active ? 'border-red-300 text-red-600 hover:bg-red-50' : 'border-green-300 text-green-600 hover:bg-green-50'}
-                              >
-                                {admin.is_active ? 'Desativar' : 'Ativar'}
-                              </Button>
-                            </div>
                           </td>
                         </tr>
                       ))}

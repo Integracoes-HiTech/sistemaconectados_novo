@@ -11,6 +11,7 @@ export interface AdminUser {
   full_name: string
   display_name: string
   is_active: boolean
+  deleted_at: string | null
   created_at: string
   updated_at: string
 }

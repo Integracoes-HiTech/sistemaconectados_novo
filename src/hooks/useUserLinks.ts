@@ -81,6 +81,26 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
 
       if (error) throw error
 
+      // VERIFICAR SE O USUÁRIO DONO DO LINK ESTÁ DESATIVADO
+      if (data && data.user_data) {
+        if (data.user_data.deleted_at) {
+          console.warn('❌ Link bloqueado: usuário com soft delete', {
+            linkId,
+            username: data.user_data.username,
+            deleted_at: data.user_data.deleted_at
+          });
+          throw new Error('Link desativado. O proprietário deste link foi desativado.');
+        }
+        
+        if (!data.user_data.is_active) {
+          console.warn('❌ Link bloqueado: usuário inativo', {
+            linkId,
+            username: data.user_data.username
+          });
+          throw new Error('Link desativado. O proprietário deste link está inativo.');
+        }
+      }
+
       // Se o link não tem link_type definido, corrigir baseado na configuração atual
       if (data && !data.link_type) {
         // Link sem link_type encontrado, corrigindo
