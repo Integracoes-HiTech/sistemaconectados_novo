@@ -15,7 +15,10 @@ export default function Settings() {
 
   // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
-    if (!authLoading && !user) {
+    // Verificar se há dados de usuário no localStorage antes de redirecionar
+    const hasUserInStorage = !!localStorage.getItem('loggedUser')
+    
+    if (!authLoading && !user && !hasUserInStorage) {
       navigate('/login');
     }
   }, [user, authLoading, navigate]);
