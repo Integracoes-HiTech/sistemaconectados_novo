@@ -32,7 +32,8 @@ import {
   ChevronsRight,
   Tag,
   XCircle,
-  CheckCircle
+  CheckCircle,
+  FileText
 } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useStats } from "@/hooks/useStats";
