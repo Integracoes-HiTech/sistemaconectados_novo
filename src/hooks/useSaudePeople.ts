@@ -4,26 +4,26 @@ import { supabase } from '@/lib/supabase';
 
 export interface SaudePerson {
   id: string;
-  leader_name: string;
-  leader_whatsapp: string;
-  leader_cep?: string;
-  person_name: string;
-  person_whatsapp: string;
-  person_cep?: string;
-  observation: string;
+  lider_nome_completo: string;
+  lider_whatsapp: string;
+  pessoa_nome_completo: string;
+  pessoa_whatsapp: string;
+  cep?: string;
+  cidade?: string;
+  observacoes: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   deleted_at?: string;
 }
 
 export interface NewSaudePerson {
-  leader_name: string;
-  leader_whatsapp: string;
-  leader_cep?: string;
-  person_name: string;
-  person_whatsapp: string;
-  person_cep?: string;
-  observation: string;
+  lider_nome_completo: string;
+  lider_whatsapp: string;
+  pessoa_nome_completo: string;
+  pessoa_whatsapp: string;
+  cep?: string;
+  cidade?: string;
+  observacoes: string;
 }
 
 export const useSaudePeople = () => {
@@ -66,13 +66,13 @@ export const useSaudePeople = () => {
         .from('saude_people')
         .insert([
           {
-            leader_name: personData.leader_name,
-            leader_whatsapp: personData.leader_whatsapp,
-            leader_cep: personData.leader_cep || null,
-            person_name: personData.person_name,
-            person_whatsapp: personData.person_whatsapp,
-            person_cep: personData.person_cep || null,
-            observation: personData.observation,
+            lider_nome_completo: personData.lider_nome_completo,
+            lider_whatsapp: personData.lider_whatsapp,
+            pessoa_nome_completo: personData.pessoa_nome_completo,
+            pessoa_whatsapp: personData.pessoa_whatsapp,
+            cep: personData.cep || null,
+            cidade: personData.cidade || null,
+            observacoes: personData.observacoes,
           }
         ])
         .select()
@@ -92,13 +92,13 @@ export const useSaudePeople = () => {
         // OPÇÃO 2: Usar function que bypassa RLS
         const { data: funcData, error: funcError } = await supabase
           .rpc('insert_saude_person', {
-            p_leader_name: personData.leader_name,
-            p_leader_whatsapp: personData.leader_whatsapp,
-            p_person_name: personData.person_name,
-            p_person_whatsapp: personData.person_whatsapp,
-            p_observation: personData.observation,
-            p_leader_cep: personData.leader_cep || null,
-            p_person_cep: personData.person_cep || null,
+            p_lider_nome_completo: personData.lider_nome_completo,
+            p_lider_whatsapp: personData.lider_whatsapp,
+            p_pessoa_nome_completo: personData.pessoa_nome_completo,
+            p_pessoa_whatsapp: personData.pessoa_whatsapp,
+            p_cep: personData.cep || null,
+            p_cidade: personData.cidade || null,
+            p_observacoes: personData.observacoes,
           });
 
         if (funcError) {
@@ -131,7 +131,7 @@ export const useSaudePeople = () => {
       const { data, error } = await supabase
         .from('saude_people')
         .select('id')
-        .eq('person_whatsapp', whatsapp)
+        .eq('pessoa_whatsapp', whatsapp)
         .is('deleted_at', null)
         .maybeSingle();
 
@@ -152,7 +152,7 @@ export const useSaudePeople = () => {
       const { data, error } = await supabase
         .from('saude_people')
         .select('id')
-        .eq('leader_whatsapp', whatsapp)
+        .eq('lider_whatsapp', whatsapp)
         .is('deleted_at', null)
         .maybeSingle();
 

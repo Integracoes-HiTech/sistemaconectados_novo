@@ -295,6 +295,80 @@ export default function Dashboard() {
     });
   };
 
+  // Função para exportar pessoas de saúde para Excel
+  const exportSaudePeopleToExcel = () => {
+    if (!filteredSaudePeople || filteredSaudePeople.length === 0) {
+      toast({
+        title: "Sem dados",
+        description: "Não há pessoas cadastradas para exportar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Adaptar dados para formato de exportação
+    const dataToExport = filteredSaudePeople.map(person => ({
+      id: person.id,
+      name: person.lider_nome_completo,
+      couple_name: person.pessoa_nome_completo,
+      phone: person.lider_whatsapp,
+      couple_phone: person.pessoa_whatsapp,
+      city: person.cidade || 'N/A',
+      cep: person.cep || 'N/A',
+      instagram: '',
+      couple_instagram: '',
+      sector: person.observacoes,
+      couple_sector: '',
+      status: 'Ativo',
+      campaign: 'SAUDE',
+      created_at: person.created_at
+    }));
+
+    exportMembersToExcel(dataToExport);
+    
+    toast({
+      title: "✅ Exportado!",
+      description: "Dados de saúde exportados para Excel com sucesso.",
+    });
+  };
+
+  // Função para exportar pessoas de saúde para PDF
+  const exportSaudePeopleToPDF = () => {
+    if (!filteredSaudePeople || filteredSaudePeople.length === 0) {
+      toast({
+        title: "Sem dados",
+        description: "Não há pessoas cadastradas para exportar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Adaptar dados para formato de exportação
+    const dataToExport = filteredSaudePeople.map(person => ({
+      id: person.id,
+      name: person.lider_nome_completo,
+      couple_name: person.pessoa_nome_completo,
+      phone: person.lider_whatsapp,
+      couple_phone: person.pessoa_whatsapp,
+      city: person.cidade || 'N/A',
+      cep: person.cep || 'N/A',
+      instagram: '',
+      couple_instagram: '',
+      sector: person.observacoes,
+      couple_sector: '',
+      status: 'Ativo',
+      campaign: 'SAUDE',
+      created_at: person.created_at
+    }));
+
+    exportMembersToPDF(dataToExport, 'Relatório de Pessoas - Campanha Saúde');
+    
+    toast({
+      title: "✅ Exportado!",
+      description: "Dados de saúde exportados para PDF com sucesso.",
+    });
+  };
+
   // Funções para AdminHitech - Gerenciar Campanhas
   const handleEditCampaign = (campaign: Campaign) => {
     if (!isAdminHitech()) {
@@ -678,18 +752,19 @@ export default function Dashboard() {
   // Filtrar pessoas de saúde (admin3)
   const filteredSaudePeople = saudePeople.filter(person => {
     const matchesSearch = saudeSearchTerm === "" || 
-      person.leader_name.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
-      person.leader_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
-      person.person_name.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
-      person.person_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
-      person.observation.toLowerCase().includes(saudeSearchTerm.toLowerCase());
+      person.lider_nome_completo.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
+      person.lider_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
+      person.pessoa_nome_completo.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
+      person.pessoa_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
+      person.cidade?.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
+      person.observacoes.toLowerCase().includes(saudeSearchTerm.toLowerCase());
 
     const matchesPhone = saudePhoneSearchTerm === "" || 
-      person.leader_whatsapp.includes(saudePhoneSearchTerm) ||
-      person.person_whatsapp.includes(saudePhoneSearchTerm);
+      person.lider_whatsapp.includes(saudePhoneSearchTerm) ||
+      person.pessoa_whatsapp.includes(saudePhoneSearchTerm);
 
     const matchesLeader = saudeLeaderFilter === "" || 
-      person.leader_name.toLowerCase().includes(saudeLeaderFilter.toLowerCase());
+      person.lider_nome_completo.toLowerCase().includes(saudeLeaderFilter.toLowerCase());
 
     return matchesSearch && matchesPhone && matchesLeader;
   }).sort((a, b) => {
@@ -2348,6 +2423,24 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Botões de Exportação */}
+            <div className="mb-4 flex gap-2">
+              <Button
+                onClick={() => exportSaudePeopleToExcel()}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </Button>
+              <Button
+                onClick={() => exportSaudePeopleToPDF()}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Exportar PDF
+              </Button>
+            </div>
+
             {/* Tabela de Pessoas de Saúde */}
             <div className="overflow-x-auto" id="saude-people-table">
               <table className="w-full border-collapse">
@@ -2355,10 +2448,10 @@ export default function Dashboard() {
                   <tr className="border-b border-institutional-light">
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Líder</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Líder</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP Líder</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Pessoa</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Pessoa</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cidade</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Observações</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
@@ -2372,19 +2465,13 @@ export default function Dashboard() {
                           <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-institutional-gold" />
                           </div>
-                          <span className="font-medium text-institutional-blue">{person.leader_name}</span>
+                          <span className="font-medium text-institutional-blue">{person.lider_nome_completo}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <Phone className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{person.leader_whatsapp}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{person.leader_cep || 'N/A'}</span>
+                          <span className="text-sm">{person.lider_whatsapp}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -2392,24 +2479,30 @@ export default function Dashboard() {
                           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-blue-600" />
                           </div>
-                          <span className="font-medium text-blue-600">{person.person_name}</span>
+                          <span className="font-medium text-blue-600">{person.pessoa_nome_completo}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <Phone className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{person.person_whatsapp}</span>
+                          <span className="text-sm">{person.pessoa_whatsapp}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{person.person_cep || 'N/A'}</span>
+                          <span className="text-sm">{person.cep || 'N/A'}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="text-sm text-gray-600 line-clamp-2" title={person.observation}>
-                          {person.observation}
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm">{person.cidade || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-gray-600 line-clamp-2" title={person.observacoes}>
+                          {person.observacoes}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -2434,7 +2527,7 @@ export default function Dashboard() {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleRemoveSaudePerson(person.id, person.person_name)}
+                            onClick={() => handleRemoveSaudePerson(person.id, person.pessoa_nome_completo)}
                             className="bg-red-600 hover:bg-red-700 text-white"
                           >
                             <UserIcon className="w-4 h-4 mr-1" />

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
-import { User, Phone, MapPin, Building, FileText, AlertCircle, CheckCircle } from "lucide-react";
+import { User, Phone, MapPin, FileText, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
 import { buscarCep, validarFormatoCep } from "@/services/cepService";
 import { useSaudePeople } from "@/hooks/useSaudePeople";
 import type { SaudePerson } from "@/hooks/useSaudePeople";
@@ -16,19 +16,18 @@ export default function PublicRegisterSaude() {
   const { editMode, personData } = (location.state as { editMode?: boolean; personData?: SaudePerson }) || {};
   
   const [formData, setFormData] = useState({
-    leaderName: "",
-    leaderWhatsapp: "",
-    leaderCep: "",
-    personName: "",
-    personWhatsapp: "",
-    personCep: "",
-    observation: ""
+    liderNomeCompleto: "",
+    liderWhatsapp: "",
+    pessoaNomeCompleto: "",
+    pessoaWhatsapp: "",
+    cep: "",
+    cidade: "",
+    observacoes: ""
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [leaderCepLoading, setLeaderCepLoading] = useState(false);
-  const [personCepLoading, setPersonCepLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
   const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople();
 
@@ -36,13 +35,13 @@ export default function PublicRegisterSaude() {
   useEffect(() => {
     if (editMode && personData) {
       setFormData({
-        leaderName: personData.leader_name,
-        leaderWhatsapp: personData.leader_whatsapp,
-        leaderCep: personData.leader_cep || "",
-        personName: personData.person_name,
-        personWhatsapp: personData.person_whatsapp,
-        personCep: personData.person_cep || "",
-        observation: personData.observation
+        liderNomeCompleto: personData.lider_nome_completo,
+        liderWhatsapp: personData.lider_whatsapp,
+        pessoaNomeCompleto: personData.pessoa_nome_completo,
+        pessoaWhatsapp: personData.pessoa_whatsapp,
+        cep: personData.cep || "",
+        cidade: personData.cidade || "",
+        observacoes: personData.observacoes
       });
     }
   }, [editMode, personData]);
@@ -82,11 +81,11 @@ export default function PublicRegisterSaude() {
   const handleInputChange = (field: string, value: string) => {
     let processedValue = value;
     
-    if (field === 'leaderWhatsapp' || field === 'personWhatsapp') {
+    if (field === 'liderWhatsapp' || field === 'pessoaWhatsapp') {
       processedValue = formatPhone(value);
-    } else if (field === 'leaderName' || field === 'personName') {
+    } else if (field === 'liderNomeCompleto' || field === 'pessoaNomeCompleto') {
       processedValue = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '');
-    } else if (field === 'leaderCep' || field === 'personCep') {
+    } else if (field === 'cep') {
       processedValue = formatCep(value);
     }
     
@@ -102,106 +101,98 @@ export default function PublicRegisterSaude() {
     }
   };
 
-  // Função para validar CEP quando o campo perde o foco
-  const handleCepBlur = async (field: 'leaderCep' | 'personCep') => {
-    const cepValue = formData[field];
+  // Buscar cidade automaticamente quando CEP estiver completo
+  const handleCepBlur = async () => {
+    const cepLimpo = formData.cep.replace(/\D/g, '');
     
-    if (!cepValue || cepValue.trim() === '') {
-      return; // CEP é opcional, não validar se estiver vazio
+    if (!cepLimpo) {
+      setFormData(prev => ({ ...prev, cidade: "" }));
+      return;
     }
 
-    const isLeader = field === 'leaderCep';
+    if (!validarFormatoCep(formData.cep)) {
+      setFormErrors(prev => ({ ...prev, cep: "CEP inválido" }));
+      setFormData(prev => ({ ...prev, cidade: "" }));
+      return;
+    }
+
+    setCepLoading(true);
     
     try {
-      if (isLeader) {
-        setLeaderCepLoading(true);
-      } else {
-        setPersonCepLoading(true);
-      }
-
-      // Limpar erros anteriores
-      setFormErrors(prev => ({
-        ...prev,
-        [field]: ''
-      }));
-
-      // Validar formato
-      if (!validarFormatoCep(cepValue)) {
-        setFormErrors(prev => ({
-          ...prev,
-          [field]: 'CEP inválido. Use o formato 12345-678'
-        }));
-        return;
-      }
-
-      // Buscar CEP para validar se existe
-      await buscarCep(cepValue);
+      const resultado = await buscarCep(cepLimpo);
       
-      // Se chegou aqui, o CEP é válido
-      toast({
-        title: "CEP válido",
-        description: "CEP encontrado com sucesso!",
-      });
-
-    } catch (error) {
-      setFormErrors(prev => ({
-        ...prev,
-        [field]: 'CEP não encontrado. Verifique e tente novamente.'
-      }));
-    } finally {
-      if (isLeader) {
-        setLeaderCepLoading(false);
+      if (resultado.erro) {
+        setFormErrors(prev => ({ ...prev, cep: "CEP não encontrado" }));
+        setFormData(prev => ({ ...prev, cidade: "" }));
       } else {
-        setPersonCepLoading(false);
+        setFormData(prev => ({ 
+          ...prev, 
+          cidade: `${resultado.localidade} - ${resultado.uf}` 
+        }));
+        setFormErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.cep;
+          return newErrors;
+        });
       }
+    } catch (error) {
+      setFormErrors(prev => ({ ...prev, cep: "Erro ao buscar CEP" }));
+      setFormData(prev => ({ ...prev, cidade: "" }));
+    } finally {
+      setCepLoading(false);
     }
   };
 
-  const validateRequiredFields = async () => {
+  const validateForm = () => {
     const errors: Record<string, string> = {};
 
-    // Validar líder - apenas Nome e WhatsApp obrigatórios
-    if (!formData.leaderName.trim()) {
-      errors.leaderName = "Nome do líder é obrigatório";
-    } else if (!validateName(formData.leaderName)) {
-      errors.leaderName = "Deve conter nome e sobrenome";
+    // Validar líder
+    if (!formData.liderNomeCompleto.trim()) {
+      errors.liderNomeCompleto = "Nome do líder é obrigatório";
+    } else if (!validateName(formData.liderNomeCompleto)) {
+      errors.liderNomeCompleto = "Digite nome e sobrenome completos";
     }
 
-    if (!formData.leaderWhatsapp.trim()) {
-      errors.leaderWhatsapp = "WhatsApp do líder é obrigatório";
-    } else if (!validatePhone(formData.leaderWhatsapp)) {
-      errors.leaderWhatsapp = "WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)";
+    if (!formData.liderWhatsapp) {
+      errors.liderWhatsapp = "WhatsApp do líder é obrigatório";
+    } else if (!validatePhone(formData.liderWhatsapp)) {
+      errors.liderWhatsapp = "WhatsApp inválido (deve ter 11 dígitos)";
     }
 
-    // Validar pessoa - Nome, WhatsApp e Observações obrigatórios
-    if (!formData.personName.trim()) {
-      errors.personName = "Nome da pessoa é obrigatório";
-    } else if (!validateName(formData.personName)) {
-      errors.personName = "Deve conter nome e sobrenome";
+    // Validar pessoa
+    if (!formData.pessoaNomeCompleto.trim()) {
+      errors.pessoaNomeCompleto = "Nome da pessoa é obrigatório";
+    } else if (!validateName(formData.pessoaNomeCompleto)) {
+      errors.pessoaNomeCompleto = "Digite nome e sobrenome completos";
     }
 
-    if (!formData.personWhatsapp.trim()) {
-      errors.personWhatsapp = "WhatsApp da pessoa é obrigatório";
-    } else if (!validatePhone(formData.personWhatsapp)) {
-      errors.personWhatsapp = "WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)";
+    if (!formData.pessoaWhatsapp) {
+      errors.pessoaWhatsapp = "WhatsApp da pessoa é obrigatório";
+    } else if (!validatePhone(formData.pessoaWhatsapp)) {
+      errors.pessoaWhatsapp = "WhatsApp inválido (deve ter 11 dígitos)";
     }
 
-    if (!formData.observation.trim()) {
-      errors.observation = "Observações são obrigatórias";
+    // Validar CEP (opcional, mas se preenchido deve ser válido)
+    if (formData.cep && !validarFormatoCep(formData.cep)) {
+      errors.cep = "CEP inválido";
+    }
+
+    // Validar observações (obrigatório)
+    if (!formData.observacoes.trim()) {
+      errors.observacoes = "Observações são obrigatórias";
     }
 
     setFormErrors(errors);
-    return errors;
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const validationErrors = await validateRequiredFields();
-    if (Object.keys(validationErrors).length > 0) {
+
+    if (!validateForm()) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos corretamente.",
+        title: "Campos inválidos",
+        description: "Por favor, corrija os erros no formulário",
         variant: "destructive",
       });
       return;
@@ -210,93 +201,75 @@ export default function PublicRegisterSaude() {
     setIsLoading(true);
 
     try {
-      // MODO DE EDIÇÃO
       if (editMode && personData) {
+        // Modo de edição
         const success = await updateSaudePerson(personData.id, {
-          leader_name: formData.leaderName,
-          leader_whatsapp: formData.leaderWhatsapp,
-          leader_cep: formData.leaderCep || undefined,
-          person_name: formData.personName,
-          person_whatsapp: formData.personWhatsapp,
-          person_cep: formData.personCep || undefined,
-          observation: formData.observation,
+          lider_nome_completo: formData.liderNomeCompleto,
+          lider_whatsapp: formData.liderWhatsapp,
+          pessoa_nome_completo: formData.pessoaNomeCompleto,
+          pessoa_whatsapp: formData.pessoaWhatsapp,
+          cep: formData.cep || undefined,
+          cidade: formData.cidade || undefined,
+          observacoes: formData.observacoes,
         });
 
-        if (!success) {
-          throw new Error('Erro ao atualizar pessoa no banco de dados');
+        if (success) {
+          toast({
+            title: "✅ Pessoa atualizada!",
+            description: "Os dados foram atualizados com sucesso.",
+          });
+          navigate("/dashboard");
         }
-
-        console.log('✅ Pessoa atualizada com sucesso');
-        
-        setIsSuccess(true);
-        toast({
-          title: "Alterações salvas com sucesso!",
-          description: "Os dados da pessoa foram atualizados.",
-        });
-        
-        // Voltar para o dashboard após 2 segundos
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
-
       } else {
-        // MODO DE CADASTRO
-        // Verificar se a pessoa já está cadastrada
-        const personExists = await checkPersonExists(formData.personWhatsapp);
-        
+        // Modo de cadastro
+        // Verificar duplicidade
+        const personExists = await checkPersonExists(formData.pessoaWhatsapp.replace(/\D/g, ''));
+
         if (personExists) {
           toast({
-            title: "Pessoa já cadastrada",
-            description: "Esta pessoa já está cadastrada no sistema com este WhatsApp.",
+            title: "WhatsApp já cadastrado",
+            description: "Esta pessoa já está cadastrada no sistema.",
             variant: "destructive",
           });
-          setIsLoading(false);
           return;
         }
 
-        // Salvar no banco de dados (tabela saude_people)
-        const newPerson = await addSaudePerson({
-          leader_name: formData.leaderName,
-          leader_whatsapp: formData.leaderWhatsapp,
-          leader_cep: formData.leaderCep || undefined,
-          person_name: formData.personName,
-          person_whatsapp: formData.personWhatsapp,
-          person_cep: formData.personCep || undefined,
-          observation: formData.observation,
+        await addSaudePerson({
+          lider_nome_completo: formData.liderNomeCompleto,
+          lider_whatsapp: formData.liderWhatsapp,
+          pessoa_nome_completo: formData.pessoaNomeCompleto,
+          pessoa_whatsapp: formData.pessoaWhatsapp,
+          cep: formData.cep || undefined,
+          cidade: formData.cidade || undefined,
+          observacoes: formData.observacoes,
         });
 
-        if (!newPerson) {
-          throw new Error('Erro ao cadastrar pessoa no banco de dados');
-        }
-
-        console.log('✅ Pessoa cadastrada com sucesso:', newPerson);
-        
         setIsSuccess(true);
-        toast({
-          title: "Cadastro realizado com sucesso!",
-          description: "A pessoa foi cadastrada no sistema.",
-        });
         
-        // Limpar formulário após 3 segundos
+        toast({
+          title: "✅ Pessoa cadastrada!",
+          description: "A pessoa foi cadastrada com sucesso na campanha de saúde.",
+        });
+
+        // Limpar formulário
+        setFormData({
+          liderNomeCompleto: "",
+          liderWhatsapp: "",
+          pessoaNomeCompleto: "",
+          pessoaWhatsapp: "",
+          cep: "",
+          cidade: "",
+          observacoes: ""
+        });
+
         setTimeout(() => {
-          setFormData({
-            leaderName: "",
-            leaderWhatsapp: "",
-            leaderCep: "",
-            personName: "",
-            personWhatsapp: "",
-            personCep: "",
-            observation: ""
-          });
           setIsSuccess(false);
         }, 3000);
       }
-
     } catch (error) {
-      console.error(`❌ Erro ao ${editMode ? 'atualizar' : 'cadastrar'} pessoa:`, error);
       toast({
-        title: editMode ? "Erro ao atualizar" : "Erro no cadastro",
-        description: error instanceof Error ? error.message : "Ocorreu um erro ao salvar os dados. Tente novamente.",
+        title: "Erro ao salvar",
+        description: error instanceof Error ? error.message : "Ocorreu um erro. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -304,269 +277,254 @@ export default function PublicRegisterSaude() {
     }
   };
 
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
-        {/* Logo no topo */}
-        <div className="mb-8">
-          <Logo size="lg" showText={true} layout="vertical" textColor="white" />
-        </div>
-
-        {/* Tela de Sucesso */}
-        <div className="w-full max-w-md text-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-institutional-blue mb-4">
-              {editMode ? 'Alterações Salvas!' : 'Cadastro Realizado!'}
-            </h2>
-            <p className="text-gray-600 mb-6">
-              {editMode 
-                ? 'Os dados da pessoa foram atualizados com sucesso no sistema.' 
-                : 'A pessoa foi cadastrada com sucesso no sistema da área da saúde.'
-              }
-            </p>
-            <Button
-              onClick={() => navigate('/dashboard')}
-              className="w-full bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-semibold"
-            >
-              Voltar ao Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
-      {/* Botão Voltar no canto superior esquerdo */}
-      <div className="fixed top-4 left-4 z-50">
-        <Button
-          onClick={() => navigate('/dashboard')}
-          className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium"
-        >
-          Voltar ao Dashboard
-        </Button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl">
+        {/* Header com Logo */}
+        <div className="flex items-center justify-between mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/dashboard")}
+            className="text-primary hover:text-primary/80"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar ao Dashboard
+          </Button>
+          <Logo />
+        </div>
 
-      {/* Logo no topo */}
-      <div className="mb-8">
-        <Logo size="lg" showText={true} layout="vertical" textColor="white" />
-      </div>
-
-      {/* Título */}
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-white mb-2">
-          Cadastro de Pessoa - Área da Saúde
-        </h1>
-        <p className="text-gray-300">
-          Preencha os dados abaixo para cadastrar uma nova pessoa
-        </p>
-      </div>
-
-      {/* Formulário de Cadastro */}
-      <div className="w-full max-w-md space-y-6">
-        
-        {/* SEÇÃO: Dados do Líder */}
-        <div className="space-y-4">
-          <div className="text-center">
-            <h3 className="text-white font-semibold text-lg mb-4">Dados do Líder</h3>
+        {/* Card do Formulário */}
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary to-secondary p-6">
+            <h1 className="text-3xl font-bold text-white">
+              {editMode ? "Editar Pessoa" : "Cadastrar Nova Pessoa"}
+            </h1>
+            <p className="text-white/90 mt-2">
+              Campanha Saúde - Sistema Conectados
+            </p>
           </div>
 
-          {/* Campo Nome do Líder */}
-          <div className="space-y-1">
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="text"
-                placeholder="Nome Completo do Líder (ex: João Silva)"
-                value={formData.leaderName}
-                onChange={(e) => handleInputChange('leaderName', e.target.value)}
-                className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.leaderName ? 'border-red-500' : ''}`}
-                required
-              />
-            </div>
-            {formErrors.leaderName && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.leaderName}</span>
-              </div>
-            )}
-          </div>
+          <form onSubmit={handleSubmit} className="p-8 space-y-8">
+            {/* Seção: Dados do Líder */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                Dados do Líder
+              </h2>
 
-          {/* Campo WhatsApp do Líder */}
-          <div className="space-y-1">
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="tel"
-                placeholder="WhatsApp (62) 99999-9999"
-                value={formData.leaderWhatsapp}
-                onChange={(e) => handleInputChange('leaderWhatsapp', e.target.value)}
-                className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.leaderWhatsapp ? 'border-red-500' : ''}`}
-                maxLength={15}
-                required
-              />
-            </div>
-            {formErrors.leaderWhatsapp && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.leaderWhatsapp}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Campo CEP do Líder (Opcional) */}
-          <div className="space-y-1">
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="text"
-                placeholder="CEP (12345-678) - Opcional"
-                value={formData.leaderCep}
-                onChange={(e) => handleInputChange('leaderCep', e.target.value)}
-                onBlur={() => handleCepBlur('leaderCep')}
-                className={`pl-12 pr-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.leaderCep ? 'border-red-500' : ''}`}
-                maxLength={9}
-                disabled={leaderCepLoading}
-              />
-              {leaderCepLoading && (
-                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <div className="w-5 h-5 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin" />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nome Completo do Líder *
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Digite o nome completo"
+                      value={formData.liderNomeCompleto}
+                      onChange={(e) => handleInputChange("liderNomeCompleto", e.target.value)}
+                      className={`pl-10 ${formErrors.liderNomeCompleto ? 'border-red-500' : ''}`}
+                    />
+                  </div>
+                  {formErrors.liderNomeCompleto && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {formErrors.liderNomeCompleto}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
-            {formErrors.leaderCep && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.leaderCep}</span>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Separador */}
-        <div className="flex items-center gap-4">
-          <div className="flex-1 h-px bg-gray-600"></div>
-          <span className="text-gray-400 text-sm font-medium">Dados da Pessoa</span>
-          <div className="flex-1 h-px bg-gray-600"></div>
-        </div>
-
-        {/* SEÇÃO: Dados da Pessoa */}
-        <div className="space-y-4">
-          {/* Campo Nome da Pessoa */}
-          <div className="space-y-1">
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="text"
-                placeholder="Nome Completo da Pessoa (ex: Maria Santos)"
-                value={formData.personName}
-                onChange={(e) => handleInputChange('personName', e.target.value)}
-                className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.personName ? 'border-red-500' : ''}`}
-                required
-              />
-            </div>
-            {formErrors.personName && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.personName}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Campo WhatsApp da Pessoa */}
-          <div className="space-y-1">
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="tel"
-                placeholder="WhatsApp (62) 99999-9999"
-                value={formData.personWhatsapp}
-                onChange={(e) => handleInputChange('personWhatsapp', e.target.value)}
-                className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.personWhatsapp ? 'border-red-500' : ''}`}
-                maxLength={15}
-                required
-              />
-            </div>
-            {formErrors.personWhatsapp && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.personWhatsapp}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Campo CEP da Pessoa (Opcional) */}
-          <div className="space-y-1">
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Input
-                type="text"
-                placeholder="CEP (12345-678) - Opcional"
-                value={formData.personCep}
-                onChange={(e) => handleInputChange('personCep', e.target.value)}
-                onBlur={() => handleCepBlur('personCep')}
-                className={`pl-12 pr-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.personCep ? 'border-red-500' : ''}`}
-                maxLength={9}
-                disabled={personCepLoading}
-              />
-              {personCepLoading && (
-                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <div className="w-5 h-5 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    WhatsApp do Líder *
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      type="tel"
+                      placeholder="(00) 00000-0000"
+                      value={formData.liderWhatsapp}
+                      onChange={(e) => handleInputChange("liderWhatsapp", e.target.value)}
+                      className={`pl-10 ${formErrors.liderWhatsapp ? 'border-red-500' : ''}`}
+                      maxLength={15}
+                    />
+                  </div>
+                  {formErrors.liderWhatsapp && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {formErrors.liderWhatsapp}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
-            {formErrors.personCep && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.personCep}</span>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Campo Observação */}
-          <div className="space-y-1">
-            <div className="relative">
-              <FileText className="absolute left-4 top-4 w-5 h-5 text-gray-400 pointer-events-none" />
-              <Textarea
-                placeholder="Observações"
-                value={formData.observation}
-                onChange={(e) => handleInputChange('observation', e.target.value)}
-                className={`pl-12 pt-3 min-h-[100px] bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg resize-none ${formErrors.observation ? 'border-red-500' : ''}`}
-                required
-              />
+            {/* Seção: Dados da Pessoa */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <User className="h-5 w-5 text-secondary" />
+                Dados da Pessoa
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nome Completo da Pessoa *
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Digite o nome completo"
+                      value={formData.pessoaNomeCompleto}
+                      onChange={(e) => handleInputChange("pessoaNomeCompleto", e.target.value)}
+                      className={`pl-10 ${formErrors.pessoaNomeCompleto ? 'border-red-500' : ''}`}
+                    />
+                  </div>
+                  {formErrors.pessoaNomeCompleto && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {formErrors.pessoaNomeCompleto}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    WhatsApp da Pessoa *
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Input
+                      type="tel"
+                      placeholder="(00) 00000-0000"
+                      value={formData.pessoaWhatsapp}
+                      onChange={(e) => handleInputChange("pessoaWhatsapp", e.target.value)}
+                      className={`pl-10 ${formErrors.pessoaWhatsapp ? 'border-red-500' : ''}`}
+                      maxLength={15}
+                    />
+                  </div>
+                  {formErrors.pessoaWhatsapp && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {formErrors.pessoaWhatsapp}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      CEP (Opcional)
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="00000-000"
+                        value={formData.cep}
+                        onChange={(e) => handleInputChange("cep", e.target.value)}
+                        onBlur={handleCepBlur}
+                        className={`pl-10 ${formErrors.cep ? 'border-red-500' : ''}`}
+                        maxLength={9}
+                      />
+                      {cepLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.cep && (
+                      <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {formErrors.cep}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cidade (Preenchido automaticamente)
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Será preenchido pelo CEP"
+                        value={formData.cidade}
+                        disabled
+                        className="pl-10 bg-gray-50 cursor-not-allowed"
+                      />
+                      {formData.cidade && (
+                        <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observações *
+                  </label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                    <Textarea
+                      placeholder="Digite suas observações..."
+                      value={formData.observacoes}
+                      onChange={(e) => handleInputChange("observacoes", e.target.value)}
+                      className={`pl-10 min-h-[100px] ${formErrors.observacoes ? 'border-red-500' : ''}`}
+                    />
+                  </div>
+                  {formErrors.observacoes && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {formErrors.observacoes}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-            {formErrors.observation && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.observation}</span>
+
+            {/* Botões */}
+            <div className="flex gap-4 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/dashboard")}
+                className="flex-1"
+                disabled={isLoading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                    {editMode ? "Atualizando..." : "Cadastrando..."}
+                  </div>
+                ) : (
+                  editMode ? "Atualizar Pessoa" : "Cadastrar Pessoa"
+                )}
+              </Button>
+            </div>
+
+            {/* Mensagem de sucesso */}
+            {isSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <div>
+                  <p className="font-medium text-green-900">Cadastro realizado com sucesso!</p>
+                  <p className="text-sm text-green-700">A pessoa foi adicionada à campanha de saúde.</p>
+                </div>
               </div>
             )}
-          </div>
+          </form>
         </div>
-
-        {/* Botão Cadastrar/Salvar */}
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isLoading}
-          className="w-full h-12 bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-semibold text-lg rounded-lg transition-all duration-200"
-        >
-          {isLoading ? (
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-institutional-blue border-t-transparent rounded-full animate-spin" />
-              {editMode ? 'Salvando...' : 'Cadastrando...'}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5" />
-              {editMode ? 'Salvar Alterações' : 'Finalizar Cadastro'}
-            </div>
-          )}
-        </Button>
       </div>
     </div>
   );
