@@ -90,7 +90,7 @@ export const useCredentials = () => {
         display_name: userData.display_name || null,
         instagram: userData.instagram,
         phone: userData.phone,
-        is_active: false, // ← MUDANÇA: Status inativo por padrão
+        is_active: true, // Usuários criados ficam ativos por padrão
         campaign: userData.campaign || 'A' // Usar campanha do usuário ou padrão A
       }
 

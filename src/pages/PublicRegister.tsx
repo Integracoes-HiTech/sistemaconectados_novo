@@ -999,37 +999,37 @@ export default function PublicRegister() {
         {/* Tela de Sucesso */}
         <div className="w-full max-w-md text-center">
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <UserPlus className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-institutional-blue mb-2">
+            <UserPlus className="w-16 h-16 mx-auto mb-4" style={{ color: accentColor }} />
+            <h2 className="text-2xl font-bold mb-2" style={{ color: bgColor }}>
               Cadastro Realizado!
             </h2>
-            <div className="bg-institutional-light rounded-lg p-4 mb-4">
-              <p className="text-sm text-institutional-blue mb-2">
+            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: `${bgColor}15` }}>
+              <p className="text-sm mb-2" style={{ color: bgColor }}>
                
             </p>
               <div className="space-y-3 text-sm">
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="font-medium text-blue-800 mb-2">Conta Compartilhada</p>
-                  <p className="text-blue-700"><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
-                  <p className="text-blue-700"><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
-                  <p className="text-blue-600 text-xs mt-2">
+                <div className="p-3 rounded-lg border" style={{ backgroundColor: `${bgColor}10`, borderColor: `${bgColor}40` }}>
+                  <p className="font-medium mb-2" style={{ color: bgColor }}>Conta Compartilhada</p>
+                  <p style={{ color: bgColor }}><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
+                  <p style={{ color: bgColor }}><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
+                  <p className="text-xs mt-2" style={{ color: `${bgColor}CC` }}>
                     Esta conta é compartilhada entre <strong>{formData.name}</strong> e <strong>{formData.couple_name}</strong>
                   </p>
                 </div>
               </div>
             </div>
-            <div className="bg-institutional-light rounded-lg p-4 mb-4">
-              <p className="text-sm text-institutional-blue">
+            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: `${bgColor}15` }}>
+              <p className="text-sm" style={{ color: bgColor }}>
                 <strong>Cadastro vinculado a:</strong><br />
                 {formData.referrer}
               </p>
               {linkData?.link_type === 'friends' && (
-                <p className="text-sm text-green-600 mt-2">
+                <p className="text-sm mt-2" style={{ color: accentColor }}>
                  Você foi cadastrado como amigo dupla por um membro com cadastro especial.
                 </p>
               )}
             </div>
-            <p className="text-sm text-institutional-blue bg-institutional-light p-3 rounded-lg mb-4">
+            <p className="text-sm p-3 rounded-lg mb-4" style={{ color: bgColor, backgroundColor: `${bgColor}15` }}>
               <strong>Como acessar:</strong> {linkData?.link_type === 'friends' 
                 ? 'Este é um cadastro de amigo  O membro responsável receberá as informações de acesso.'
                 : 'Ambos podem usar a mesma conta compartilhada para fazer login no sistema. A dupla compartilha o mesmo usuário, senha e link de cadastro. Clique no botão abaixo para entrar.'

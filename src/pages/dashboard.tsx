@@ -1107,8 +1107,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Mapa Interativo - Apenas Campanha B */}
-        {user?.campaign === 'B' && (
+        {/* Mapa Interativo - Apenas Administradores da Campanha B */}
+        {user?.campaign === 'B' && isAdmin() && (
           <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6 overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-institutional-blue">
