@@ -24,6 +24,7 @@ import { buscarCep, validarFormatoCep, formatarCep, limparCep, CepData } from "@
 import { AuthUser, supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useCampaigns } from "@/hooks/useCampaigns";
+import { getTextColor, getOverlayColors } from "@/lib/colorUtils";
 
 export default function PublicRegister() {
   const { linkId } = useParams();
@@ -87,12 +88,17 @@ export default function PublicRegister() {
   const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
   
   // Buscar cores da campanha baseado no link/referrer com memoização
-  const { bgColor, accentColor } = useMemo(() => {
+  const { bgColor, accentColor, textColor, overlayColors } = useMemo(() => {
     const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
     const campaign = getCampaignByCode(campaignCode);
+    const bg = campaign?.background_color || '#14446C';
+    const accent = campaign?.accent_color || '#D4AF37';
+    
     return {
-      bgColor: campaign?.background_color || '#14446C',
-      accentColor: campaign?.accent_color || '#D4AF37'
+      bgColor: bg,
+      accentColor: accent,
+      textColor: getTextColor(bg), // Calcula automaticamente branco ou preto
+      overlayColors: getOverlayColors(bg) // Calcula todas as variações
     };
   }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode]);
 
@@ -990,7 +996,7 @@ export default function PublicRegister() {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
         {/* Logo no topo */}
         <div className="mb-8">
           <Logo size="lg" showText={true} layout="vertical" textColor="white" />
@@ -1000,36 +1006,36 @@ export default function PublicRegister() {
         <div className="w-full max-w-md text-center">
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
             <UserPlus className="w-16 h-16 mx-auto mb-4" style={{ color: accentColor }} />
-            <h2 className="text-2xl font-bold mb-2" style={{ color: bgColor }}>
+            <h2 className="text-2xl font-bold mb-2 text-gray-800">
               Cadastro Realizado!
             </h2>
-            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: `${bgColor}15` }}>
-              <p className="text-sm mb-2" style={{ color: bgColor }}>
+            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: overlayColors.bgMedium }}>
+              <p className="text-sm mb-2 text-gray-700">
                
             </p>
               <div className="space-y-3 text-sm">
-                <div className="p-3 rounded-lg border" style={{ backgroundColor: `${bgColor}10`, borderColor: `${bgColor}40` }}>
-                  <p className="font-medium mb-2" style={{ color: bgColor }}>Conta Compartilhada</p>
-                  <p style={{ color: bgColor }}><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
-                  <p style={{ color: bgColor }}><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
-                  <p className="text-xs mt-2" style={{ color: `${bgColor}CC` }}>
+                <div className="p-3 rounded-lg border" style={{ backgroundColor: overlayColors.bgLight, borderColor: overlayColors.border }}>
+                  <p className="font-medium mb-2 text-gray-800">Conta Compartilhada</p>
+                  <p className="text-gray-700"><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
+                  <p className="text-gray-700"><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
+                  <p className="text-xs mt-2 text-gray-600">
                     Esta conta é compartilhada entre <strong>{formData.name}</strong> e <strong>{formData.couple_name}</strong>
                   </p>
                 </div>
               </div>
             </div>
-            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: `${bgColor}15` }}>
-              <p className="text-sm" style={{ color: bgColor }}>
+            <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: overlayColors.bgMedium }}>
+              <p className="text-sm text-gray-700">
                 <strong>Cadastro vinculado a:</strong><br />
                 {formData.referrer}
               </p>
               {linkData?.link_type === 'friends' && (
-                <p className="text-sm mt-2" style={{ color: accentColor }}>
+                <p className="text-sm mt-2 text-green-600">
                  Você foi cadastrado como amigo dupla por um membro com cadastro especial.
                 </p>
               )}
             </div>
-            <p className="text-sm p-3 rounded-lg mb-4" style={{ color: bgColor, backgroundColor: `${bgColor}15` }}>
+            <p className="text-sm p-3 rounded-lg mb-4 text-gray-700" style={{ backgroundColor: overlayColors.bgMedium }}>
               <strong>Como acessar:</strong> {linkData?.link_type === 'friends' 
                 ? 'Este é um cadastro de amigo  O membro responsável receberá as informações de acesso.'
                 : 'Ambos podem usar a mesma conta compartilhada para fazer login no sistema. A dupla compartilha o mesmo usuário, senha e link de cadastro. Clique no botão abaixo para entrar.'
@@ -1081,8 +1087,8 @@ export default function PublicRegister() {
                     });
                   }
                 }}
-                className="w-full h-12 font-semibold text-lg rounded-lg transition-all duration-200"
-                style={{ backgroundColor: accentColor, color: bgColor }}
+                className="w-full h-12 font-semibold text-lg rounded-lg transition-all duration-200 text-white"
+                style={{ backgroundColor: accentColor }}
               >
                 <div className="flex items-center gap-2">
                   <LogIn className="w-5 h-5" />
