@@ -1,0 +1,20 @@
+# Permitir que este arquivo seja carregado em iframe do mesmo domínio
+<IfModule mod_headers.c>
+    # Permitir iframe do mesmo domínio
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # Permitir iframe via CSP
+    Header always set Content-Security-Policy "frame-ancestors 'self' https://conectadosdigital.com.br http://localhost:*"
+    
+    # Permitir CORS para APIs externas
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type"
+</IfModule>
+
+# Cache para o mapa (melhorar performance)
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/html "access plus 1 hour"
+</IfModule>
+

@@ -15,4 +15,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Garantir que a pasta mapas seja copiada durante o build
+  publicDir: 'public',
 }));
