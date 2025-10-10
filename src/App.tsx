@@ -11,6 +11,7 @@ import PublicRegister from "./pages/PublicRegister";
 import PublicRegisterSaude from "./pages/PublicRegisterSaude";
 import PublicRegisterCampanha from "./pages/PublicRegisterCampanha";
 import Settings from "./pages/Settings";
+import PaidContracts from "./pages/PaidContracts";
 import NotFound from "./pages/NotFound";
 
 // Componente de loading global
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/paid-contracts" element={<PaidContracts />} />
             <Route path="/cadastro/:linkId" element={<PublicRegister />} />
             <Route path="/cadastro-saude" element={<PublicRegisterSaude />} />
             <Route path="/cadastro-campanha" element={<PublicRegisterCampanha />} />

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,13 @@ export default function PaidContracts() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
+
+  // Proteção de rota - redirecionar para login se não estiver autenticado
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
 
   const { 
     contracts, 

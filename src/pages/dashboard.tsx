@@ -56,6 +56,23 @@ import { supabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   
+  // Função para formatar telefone
+  const formatPhone = (phone: string) => {
+    if (!phone) return 'N/A';
+    // Remove tudo que não é número
+    const numbers = phone.replace(/\D/g, '');
+    // Se tem 11 dígitos (55 + DDD + número)
+    if (numbers.length === 11) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 4)} ${numbers.slice(4, 9)}-${numbers.slice(9)}`;
+    }
+    // Se tem 10 dígitos (DDD + número)
+    if (numbers.length === 10) {
+      return `(55) ${numbers.slice(0, 2)} ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+    }
+    // Retorna como está se não conseguir formatar
+    return phone;
+  };
+  
   const [userLink, setUserLink] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [phoneSearchTerm, setPhoneSearchTerm] = useState("");
@@ -84,6 +101,13 @@ export default function Dashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+
+  // Proteção de rota - redirecionar para login se não estiver autenticado
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
 
   // Estado para armazenar cores da campanha do banco
   const [campaignColors, setCampaignColors] = useState<{
@@ -310,9 +334,9 @@ export default function Dashboard() {
     // Mapear dados para formato Excel com os campos corretos da tabela saude_people
     const dataToExport = filteredSaudePeople.map(person => ({
       'Líder - Nome Completo': person.lider_nome_completo || '',
-      'Líder - WhatsApp': person.lider_whatsapp || '',
+      'Líder - WhatsApp': formatPhone(person.lider_whatsapp || ''),
       'Pessoa - Nome Completo': person.pessoa_nome_completo || '',
-      'Pessoa - WhatsApp': person.pessoa_whatsapp || '',
+      'Pessoa - WhatsApp': formatPhone(person.pessoa_whatsapp || ''),
       'CEP': person.cep || 'N/A',
       'Cidade': person.cidade || 'N/A',
       'Observações': person.observacoes || '',
@@ -2426,15 +2450,15 @@ export default function Dashboard() {
               <table className="w-full border-collapse table-fixed">
                 <thead>
                   <tr className="border-b border-institutional-light">
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-32">Líder</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-36">WhatsApp Líder</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-32">Pessoa</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-36">WhatsApp Pessoa</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">CEP</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-40">Cidade</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-48">Observações</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-20">Ações</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-40">Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-44">WhatsApp Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-40">Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-44">WhatsApp Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-28">CEP</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-48">Cidade</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-56">Observações</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-28">Data</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2480,8 +2504,8 @@ export default function Dashboard() {
                           <span className="text-sm">{person.cidade || 'N/A'}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 w-48">
-                        <div className="w-48">
+                      <td className="py-3 px-4 w-56">
+                        <div className="w-56">
                           <span className="text-sm text-gray-600 break-words whitespace-normal" title={person.observacoes}>
                             {person.observacoes}
                           </span>

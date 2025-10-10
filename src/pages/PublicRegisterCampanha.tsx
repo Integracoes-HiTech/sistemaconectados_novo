@@ -13,11 +13,18 @@ import type { Campaign } from "@/hooks/useCampaigns";
 export default function PublicRegisterCampanha() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, user, isAdminHitech } = useAuth();
   const { editMode, campaignData } = (location.state || {}) as { 
     editMode?: boolean; 
     campaignData?: Campaign 
   };
+
+  // Proteção de rota - apenas AdminHitech pode acessar
+  useEffect(() => {
+    if (!user || !isAdminHitech()) {
+      navigate('/login');
+    }
+  }, [user, isAdminHitech, navigate]);
 
   const [formData, setFormData] = useState({
     name: "",

@@ -9,12 +9,22 @@ import { User, Phone, MapPin, FileText, AlertCircle, CheckCircle, UserPlus, Arro
 import { buscarCep, validarFormatoCep } from "@/services/cepService";
 import { useSaudePeople } from "@/hooks/useSaudePeople";
 import { useCampaigns } from "@/hooks/useCampaigns";
+import { useAuth } from "@/hooks/useAuth";
 import type { SaudePerson } from "@/hooks/useSaudePeople";
 
 export default function PublicRegisterSaude() {
   const navigate = useNavigate();
   const location = useLocation();
   const { editMode, personData } = (location.state as { editMode?: boolean; personData?: SaudePerson }) || {};
+  
+  // Proteção de rota - apenas admin3 pode acessar
+  const { user, isAdmin3 } = useAuth();
+  
+  useEffect(() => {
+    if (!user || !isAdmin3()) {
+      navigate('/login');
+    }
+  }, [user, isAdmin3, navigate]);
   
   const [formData, setFormData] = useState({
     liderNomeCompleto: "",
