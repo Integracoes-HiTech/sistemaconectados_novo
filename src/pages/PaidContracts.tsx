@@ -231,9 +231,7 @@ export default function PaidContracts() {
         </div>
 
         {/* Rodapé */}
-        <div className="text-center text-white text-sm">
-          <p>Todos os direitos reservados HitechDesenvolvimento 2025</p>
-        </div>
+        
       </div>
     );
   }

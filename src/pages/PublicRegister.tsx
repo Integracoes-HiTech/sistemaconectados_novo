@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import { buscarCep, validarFormatoCep, formatarCep, limparCep, CepData } from "@
 // import { validateInstagramAccount } from "@/services/instagramValidation";
 import { AuthUser, supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useCampaigns } from "@/hooks/useCampaigns";
 
 export default function PublicRegister() {
   const { linkId } = useParams();
@@ -83,6 +84,17 @@ export default function PublicRegister() {
   const { shouldShowMemberLimitAlert, checkMemberLimit } = useSystemSettings();
   const { addFriend } = useFriends();
   const { toast } = useToast();
+  const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
+  
+  // Buscar cores da campanha baseado no link/referrer com memoização
+  const { bgColor, accentColor } = useMemo(() => {
+    const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+    const campaign = getCampaignByCode(campaignCode);
+    return {
+      bgColor: campaign?.background_color || '#14446C',
+      accentColor: campaign?.accent_color || '#D4AF37'
+    };
+  }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode]);
 
 
 
@@ -738,6 +750,18 @@ export default function PublicRegister() {
     }
   }, [linkId, fetchReferrerData]);
 
+  // Aguardar carregar campanhas antes de renderizar para evitar flash de cores
+  if (campaignsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
+        <div className="text-white text-center">
+          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p>Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -1057,7 +1081,8 @@ export default function PublicRegister() {
                     });
                   }
                 }}
-                className="w-full h-12 bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-semibold text-lg rounded-lg transition-all duration-200"
+                className="w-full h-12 font-semibold text-lg rounded-lg transition-all duration-200"
+                style={{ backgroundColor: accentColor, color: bgColor }}
               >
                 <div className="flex items-center gap-2">
                   <LogIn className="w-5 h-5" />
@@ -1070,9 +1095,7 @@ export default function PublicRegister() {
 
 
         {/* Rodapé */}
-        <div className="text-center text-white text-sm">
-          <p>Todos os direitos reservados HitechDesenvolvimento 2025</p>
-        </div>
+        
       </div>
     );
   }
@@ -1151,7 +1174,7 @@ export default function PublicRegister() {
   }
 
   return (
-    <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
       {/* Logo no topo */}
       <div className="mb-8">
         <Logo size="lg" showText={true} layout="vertical" textColor="white" />
@@ -1520,11 +1543,11 @@ export default function PublicRegister() {
           type="button"
           onClick={handleSubmit}
           disabled={isLoading}
-          className="w-full h-12 bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-semibold text-lg rounded-lg transition-all duration-200"
+          className="w-full h-12 bg-[#D4AF37] hover:bg-[#C19B2E] text-white font-semibold text-lg rounded-lg transition-all duration-200"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-institutional-blue border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               Cadastrando...
             </div>
           ) : (
@@ -1539,10 +1562,7 @@ export default function PublicRegister() {
        
       </div>
 
-      {/* Rodapé */}
-      <div className="mt-12 text-center text-white text-sm">
-        <p>Todos os direitos reservados HitechDesenvolvimento 2025</p>
-      </div>
+
 
     </div>
   );

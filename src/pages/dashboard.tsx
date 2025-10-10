@@ -307,25 +307,19 @@ export default function Dashboard() {
       return;
     }
 
-    // Adaptar dados para formato de exportação
+    // Mapear dados para formato Excel com os campos corretos da tabela saude_people
     const dataToExport = filteredSaudePeople.map(person => ({
-      id: person.id,
-      name: person.lider_nome_completo,
-      couple_name: person.pessoa_nome_completo,
-      phone: person.lider_whatsapp,
-      couple_phone: person.pessoa_whatsapp,
-      city: person.cidade || 'N/A',
-      cep: person.cep || 'N/A',
-      instagram: '',
-      couple_instagram: '',
-      sector: person.observacoes,
-      couple_sector: '',
-      status: 'Ativo',
-      campaign: 'SAUDE',
-      created_at: person.created_at
+      'Líder - Nome Completo': person.lider_nome_completo || '',
+      'Líder - WhatsApp': person.lider_whatsapp || '',
+      'Pessoa - Nome Completo': person.pessoa_nome_completo || '',
+      'Pessoa - WhatsApp': person.pessoa_whatsapp || '',
+      'CEP': person.cep || 'N/A',
+      'Cidade': person.cidade || 'N/A',
+      'Observações': person.observacoes || '',
+      'Data de Cadastro': person.created_at ? new Date(person.created_at).toLocaleDateString('pt-BR') : ''
     }));
 
-    exportMembersToExcel(dataToExport);
+    exportToExcel(dataToExport, 'pessoas-saude.xlsx', 'Pessoas Saúde');
     
     toast({
       title: "✅ Exportado!",
@@ -333,8 +327,8 @@ export default function Dashboard() {
     });
   };
 
-  // Função para exportar pessoas de saúde para PDF
-  const exportSaudePeopleToPDF = () => {
+  // Função para exportar pessoas de saúde para PDF com cards bonitos
+  const handleExportSaudePeopleToPDF = () => {
     if (!filteredSaudePeople || filteredSaudePeople.length === 0) {
       toast({
         title: "Sem dados",
@@ -344,29 +338,12 @@ export default function Dashboard() {
       return;
     }
 
-    // Adaptar dados para formato de exportação
-    const dataToExport = filteredSaudePeople.map(person => ({
-      id: person.id,
-      name: person.lider_nome_completo,
-      couple_name: person.pessoa_nome_completo,
-      phone: person.lider_whatsapp,
-      couple_phone: person.pessoa_whatsapp,
-      city: person.cidade || 'N/A',
-      cep: person.cep || 'N/A',
-      instagram: '',
-      couple_instagram: '',
-      sector: person.observacoes,
-      couple_sector: '',
-      status: 'Ativo',
-      campaign: 'SAUDE',
-      created_at: person.created_at
-    }));
-
-    exportMembersToPDF(dataToExport, 'Relatório de Pessoas - Campanha Saúde');
+    // Usar a função específica de PDF com cards
+    exportSaudePeopleToPDF(filteredSaudePeople);
     
     toast({
-      title: "✅ Exportado!",
-      description: "Dados de saúde exportados para PDF com sucesso.",
+      title: "✅ PDF Exportado!",
+      description: "Relatório de saúde exportado com sucesso.",
     });
   };
 
@@ -572,12 +549,14 @@ export default function Dashboard() {
   
   const { 
     exportToPDF, 
+    exportToExcel,
     exportMembersToExcel, 
     exportContractsToExcel, 
     exportReportDataToPDF,
     exportFriendsToExcel,
     exportMembersToPDF,
-    exportFriendsToPDF
+    exportFriendsToPDF,
+    exportSaudePeopleToPDF
   } = useExportReports();
   
   const { 
@@ -882,7 +861,7 @@ export default function Dashboard() {
                 {isAdminHitech()
                 ? "Gerencie o sistema e suas funcionalidades"
                 : isAdmin3()
-                ? "Gerencie sua rede de pessoas da área da saúde"
+                ? "Gerencie sua rede de pessoas da saúde"
                 : isAdminUser
                 ? "Visão geral completa do sistema - Todos os usuários e dados consolidados"
                 : "Gerencie sua rede de membros e acompanhe resultados"
@@ -2434,7 +2413,7 @@ export default function Dashboard() {
                 Exportar Excel
               </Button>
               <Button
-                onClick={() => exportSaudePeopleToPDF()}
+                onClick={() => handleExportSaudePeopleToPDF()}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
                 <FileText className="w-4 h-4 mr-2" />
@@ -2444,18 +2423,18 @@ export default function Dashboard() {
 
             {/* Tabela de Pessoas de Saúde */}
             <div className="overflow-x-auto" id="saude-people-table">
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse table-fixed">
                 <thead>
                   <tr className="border-b border-institutional-light">
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Líder</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Líder</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Pessoa</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp Pessoa</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">CEP</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cidade</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Observações</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-32">Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-36">WhatsApp Líder</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-32">Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-36">WhatsApp Pessoa</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">CEP</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-40">Cidade</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-48">Observações</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">Data</th>
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-20">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2501,10 +2480,12 @@ export default function Dashboard() {
                           <span className="text-sm">{person.cidade || 'N/A'}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="text-sm text-gray-600 line-clamp-2" title={person.observacoes}>
-                          {person.observacoes}
-                        </span>
+                      <td className="py-3 px-4 w-48">
+                        <div className="w-48">
+                          <span className="text-sm text-gray-600 break-words whitespace-normal" title={person.observacoes}>
+                            {person.observacoes}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
@@ -2520,7 +2501,10 @@ export default function Dashboard() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleEditSaudePerson(person)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                            className="text-white border-0"
+                            style={{ backgroundColor: '#16A34A' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
                           >
                             <Settings className="w-4 h-4 mr-1" />
                             Editar

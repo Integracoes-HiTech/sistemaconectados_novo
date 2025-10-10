@@ -724,6 +724,135 @@ export const useExportReports = () => {
     exportToExcel(data, 'amigos.xlsx', 'Amigos')
   }, [exportToExcel])
 
+  // Criar PDF de pessoas de saúde com layout de cards (6 por página - 3x2)
+  const createSaudePeoplePDFCards = (pdf: jsPDF, people: unknown[], startY: number) => {
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 8
+    const cardsPerRow = 3
+    const rowsPerPage = 2
+    const cardWidth = (pageWidth - (margin * 2) - ((cardsPerRow - 1) * 6)) / cardsPerRow
+    const cardHeight = (pageHeight - startY - 20 - ((rowsPerPage - 1) * 6)) / rowsPerPage
+    let currentX = margin
+    let currentY = startY
+
+    people.forEach((person, index) => {
+      const p = person as Record<string, unknown>
+      const cardsPerPage = cardsPerRow * rowsPerPage // 6 cards por página
+      
+      // Verificar se precisa de nova página (6 cards por página: 3x2)
+      if (index > 0 && index % cardsPerPage === 0) {
+        pdf.addPage()
+        currentY = startY
+        currentX = margin
+      }
+
+      // Verificar se precisa quebrar linha (3 cards por linha)
+      if (index > 0 && index % cardsPerRow === 0 && index % cardsPerPage !== 0) {
+        currentY += cardHeight + 8
+        currentX = margin
+      }
+
+      // Desenhar card com cor de fundo diferente
+      pdf.setFillColor(240, 248, 255) // Azul claro para saúde
+      pdf.rect(currentX, currentY, cardWidth, cardHeight, 'F')
+      pdf.setDrawColor(100, 149, 237) // Borda azul
+      pdf.rect(currentX, currentY, cardWidth, cardHeight, 'S')
+
+      // Título do card - Líder
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(16, 78, 139) // Azul escuro
+      pdf.text(`Líder: ${String(p.lider_nome_completo || '')}`, currentX + 2, currentY + 8)
+
+      // Dados do Líder
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(0, 0, 0)
+      
+      let textY = currentY + 14
+      pdf.text(`WhatsApp: ${String(p.lider_whatsapp || '')}`, currentX + 2, textY)
+      
+      // Dados da Pessoa
+      textY += 6
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(7)
+      pdf.setTextColor(34, 139, 34) // Verde para pessoa
+      pdf.text(`Pessoa: ${String(p.pessoa_nome_completo || '')}`, currentX + 2, textY)
+      
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(0, 0, 0)
+      textY += 4.5
+      pdf.text(`WhatsApp: ${String(p.pessoa_whatsapp || '')}`, currentX + 2, textY)
+      
+      // Localização
+      if (p.cidade || p.cep) {
+        textY += 4.5
+        const locationText = p.cidade ? `Cidade: ${String(p.cidade)}` : `CEP: ${String(p.cep || '')}`
+        pdf.text(locationText, currentX + 2, textY)
+      }
+
+      // Observações (truncadas se muito longas)
+      if (p.observacoes) {
+        textY += 6
+        pdf.setFont('helvetica', 'italic')
+        pdf.setFontSize(6)
+        pdf.setTextColor(100, 100, 100)
+        const obsText = String(p.observacoes)
+        const maxChars = 80
+        const truncatedObs = obsText.length > maxChars ? obsText.substring(0, maxChars) + '...' : obsText
+        pdf.text(`Obs: ${truncatedObs}`, currentX + 2, textY)
+      }
+
+      // Data de cadastro
+      textY += 4.5
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(6)
+      pdf.setTextColor(150, 150, 150)
+      if (p.created_at) {
+        const date = new Date(p.created_at as string).toLocaleDateString('pt-BR')
+        pdf.text(`Cadastrado em: ${date}`, currentX + 2, textY)
+      }
+
+      // Próximo card (3 por linha)
+      if ((index + 1) % cardsPerRow === 0) {
+        currentX = margin
+      } else {
+        currentX += cardWidth + 8
+      }
+    })
+  }
+
+  // Exportar pessoas de saúde para PDF estruturado (layout de cards)
+  const exportSaudePeopleToPDF = useCallback((people: unknown[]) => {
+    try {
+      if (!people || people.length === 0) {
+        throw new Error('Não é possível gerar um relatório sem dados')
+      }
+
+      const pdf = new jsPDF('l', 'mm', 'a4') // Landscape
+      
+      // Título
+      pdf.setFontSize(16)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(0, 0, 0)
+      pdf.text('Relatório Completo - Saúde', 20, 15)
+      
+      // Data de geração e total
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 20, 25)
+      pdf.text(`Total: ${people.length} pessoas`, 200, 25)
+      
+      // Criar cards
+      createSaudePeoplePDFCards(pdf, people, 35)
+
+      pdf.save('pessoas_saude_completo.pdf')
+    } catch (error) {
+      throw new Error(`Erro ao exportar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    }
+  }, [])
+
   return {
     exportToPDF,
     exportToExcel,
@@ -732,6 +861,7 @@ export const useExportReports = () => {
     exportReportDataToPDF,
     exportFriendsToExcel,
     exportMembersToPDF,
-    exportFriendsToPDF
+    exportFriendsToPDF,
+    exportSaudePeopleToPDF
   }
 }

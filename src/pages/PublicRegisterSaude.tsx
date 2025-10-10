@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
-import { User, Phone, MapPin, FileText, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
+import { User, Phone, MapPin, FileText, AlertCircle, CheckCircle, UserPlus, ArrowLeft } from "lucide-react";
 import { buscarCep, validarFormatoCep } from "@/services/cepService";
 import { useSaudePeople } from "@/hooks/useSaudePeople";
+import { useCampaigns } from "@/hooks/useCampaigns";
 import type { SaudePerson } from "@/hooks/useSaudePeople";
 
 export default function PublicRegisterSaude() {
@@ -26,10 +27,19 @@ export default function PublicRegisterSaude() {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
   const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople();
+  const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
+  
+  // Buscar cores da campanha "saude" com memoização
+  const { bgColor, accentColor } = useMemo(() => {
+    const saudeCampaign = getCampaignByCode('saude');
+    return {
+      bgColor: saudeCampaign?.background_color || '#14446C',
+      accentColor: saudeCampaign?.accent_color || '#D4AF37'
+    };
+  }, [getCampaignByCode]);
 
   // Carregar dados para edição
   useEffect(() => {
@@ -121,22 +131,18 @@ export default function PublicRegisterSaude() {
     try {
       const resultado = await buscarCep(cepLimpo);
       
-      if (resultado.erro) {
-        setFormErrors(prev => ({ ...prev, cep: "CEP não encontrado" }));
-        setFormData(prev => ({ ...prev, cidade: "" }));
-      } else {
-        setFormData(prev => ({ 
-          ...prev, 
-          cidade: `${resultado.localidade} - ${resultado.uf}` 
-        }));
-        setFormErrors(prev => {
-          const newErrors = { ...prev };
-          delete newErrors.cep;
-          return newErrors;
-        });
-      }
+      // Preencher cidade com os dados do serviço
+      setFormData(prev => ({ 
+        ...prev, 
+        cidade: `${resultado.cidade} - ${resultado.uf}` 
+      }));
+      setFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.cep;
+        return newErrors;
+      });
     } catch (error) {
-      setFormErrors(prev => ({ ...prev, cep: "Erro ao buscar CEP" }));
+      setFormErrors(prev => ({ ...prev, cep: error instanceof Error ? error.message : "Erro ao buscar CEP" }));
       setFormData(prev => ({ ...prev, cidade: "" }));
     } finally {
       setCepLoading(false);
@@ -244,27 +250,15 @@ export default function PublicRegisterSaude() {
           observacoes: formData.observacoes,
         });
 
-        setIsSuccess(true);
-        
         toast({
           title: "✅ Pessoa cadastrada!",
-          description: "A pessoa foi cadastrada com sucesso na campanha de saúde.",
+          description: "A pessoa foi cadastrada com sucesso. Redirecionando...",
         });
 
-        // Limpar formulário
-        setFormData({
-          liderNomeCompleto: "",
-          liderWhatsapp: "",
-          pessoaNomeCompleto: "",
-          pessoaWhatsapp: "",
-          cep: "",
-          cidade: "",
-          observacoes: ""
-        });
-
+        // Redirecionar para o dashboard após 1.5 segundos
         setTimeout(() => {
-          setIsSuccess(false);
-        }, 3000);
+          navigate("/dashboard");
+        }, 1500);
       }
     } catch (error) {
       toast({
@@ -277,255 +271,249 @@ export default function PublicRegisterSaude() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
-        {/* Header com Logo */}
-        <div className="flex items-center justify-between mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/dashboard")}
-            className="text-primary hover:text-primary/80"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar ao Dashboard
-          </Button>
-          <Logo />
-        </div>
-
-        {/* Card do Formulário */}
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-primary to-secondary p-6">
-            <h1 className="text-3xl font-bold text-white">
-              {editMode ? "Editar Pessoa" : "Cadastrar Nova Pessoa"}
-            </h1>
-            <p className="text-white/90 mt-2">
-              Campanha Saúde - Sistema Conectados
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="p-8 space-y-8">
-            {/* Seção: Dados do Líder */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                Dados do Líder
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome Completo do Líder *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      type="text"
-                      placeholder="Digite o nome completo"
-                      value={formData.liderNomeCompleto}
-                      onChange={(e) => handleInputChange("liderNomeCompleto", e.target.value)}
-                      className={`pl-10 ${formErrors.liderNomeCompleto ? 'border-red-500' : ''}`}
-                    />
-                  </div>
-                  {formErrors.liderNomeCompleto && (
-                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {formErrors.liderNomeCompleto}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    WhatsApp do Líder *
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      type="tel"
-                      placeholder="(00) 00000-0000"
-                      value={formData.liderWhatsapp}
-                      onChange={(e) => handleInputChange("liderWhatsapp", e.target.value)}
-                      className={`pl-10 ${formErrors.liderWhatsapp ? 'border-red-500' : ''}`}
-                      maxLength={15}
-                    />
-                  </div>
-                  {formErrors.liderWhatsapp && (
-                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {formErrors.liderWhatsapp}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Seção: Dados da Pessoa */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                <User className="h-5 w-5 text-secondary" />
-                Dados da Pessoa
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome Completo da Pessoa *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      type="text"
-                      placeholder="Digite o nome completo"
-                      value={formData.pessoaNomeCompleto}
-                      onChange={(e) => handleInputChange("pessoaNomeCompleto", e.target.value)}
-                      className={`pl-10 ${formErrors.pessoaNomeCompleto ? 'border-red-500' : ''}`}
-                    />
-                  </div>
-                  {formErrors.pessoaNomeCompleto && (
-                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {formErrors.pessoaNomeCompleto}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    WhatsApp da Pessoa *
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      type="tel"
-                      placeholder="(00) 00000-0000"
-                      value={formData.pessoaWhatsapp}
-                      onChange={(e) => handleInputChange("pessoaWhatsapp", e.target.value)}
-                      className={`pl-10 ${formErrors.pessoaWhatsapp ? 'border-red-500' : ''}`}
-                      maxLength={15}
-                    />
-                  </div>
-                  {formErrors.pessoaWhatsapp && (
-                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {formErrors.pessoaWhatsapp}
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      CEP (Opcional)
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="00000-000"
-                        value={formData.cep}
-                        onChange={(e) => handleInputChange("cep", e.target.value)}
-                        onBlur={handleCepBlur}
-                        className={`pl-10 ${formErrors.cep ? 'border-red-500' : ''}`}
-                        maxLength={9}
-                      />
-                      {cepLoading && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
-                        </div>
-                      )}
-                    </div>
-                    {formErrors.cep && (
-                      <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {formErrors.cep}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cidade (Preenchido automaticamente)
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="Será preenchido pelo CEP"
-                        value={formData.cidade}
-                        disabled
-                        className="pl-10 bg-gray-50 cursor-not-allowed"
-                      />
-                      {formData.cidade && (
-                        <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Observações *
-                  </label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <Textarea
-                      placeholder="Digite suas observações..."
-                      value={formData.observacoes}
-                      onChange={(e) => handleInputChange("observacoes", e.target.value)}
-                      className={`pl-10 min-h-[100px] ${formErrors.observacoes ? 'border-red-500' : ''}`}
-                    />
-                  </div>
-                  {formErrors.observacoes && (
-                    <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {formErrors.observacoes}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Botões */}
-            <div className="flex gap-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/dashboard")}
-                className="flex-1"
-                disabled={isLoading}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                    {editMode ? "Atualizando..." : "Cadastrando..."}
-                  </div>
-                ) : (
-                  editMode ? "Atualizar Pessoa" : "Cadastrar Pessoa"
-                )}
-              </Button>
-            </div>
-
-            {/* Mensagem de sucesso */}
-            {isSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-                <div>
-                  <p className="font-medium text-green-900">Cadastro realizado com sucesso!</p>
-                  <p className="text-sm text-green-700">A pessoa foi adicionada à campanha de saúde.</p>
-                </div>
-              </div>
-            )}
-          </form>
+  // Aguardar carregar campanhas antes de renderizar para evitar flash de cores
+  if (campaignsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
+        <div className="text-white text-center">
+          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p>Carregando...</p>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
+      {/* Botão Voltar ao Dashboard */}
+      <div className="fixed top-4 left-4 z-50">
+        <Button
+          onClick={() => navigate("/dashboard")}
+          variant="ghost"
+          className="text-white hover:bg-white/10"
+          style={{ color: 'white', '&:hover': { color: accentColor } } as React.CSSProperties}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar ao Dashboard
+        </Button>
+      </div>
+
+      {/* Logo no topo */}
+      <div className="mb-8">
+        <Logo size="lg" showText={true} layout="vertical" textColor="white" />
+      </div>
+
+      {/* Informação do Cadastro */}
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-bold text-white mb-2">
+          {editMode ? "Editar Pessoa Saúde" : "Cadastrar Nova Pessoa Saúde"}
+        </h1>
+        <p className="text-gray-300">
+          Sistema de Gestão de Pessoas da Saúde
+        </p>
+      </div>
+
+      {/* Formulário de Cadastro */}
+      <div className="w-full max-w-md space-y-6">
+        {/* Separador - Dados do Líder */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1 h-px bg-gray-600"></div>
+          <span className="text-white text-sm font-medium">Dados do Líder</span>
+          <div className="flex-1 h-px bg-gray-600"></div>
+        </div>
+
+        {/* Campo Nome do Líder */}
+        <div className="space-y-1">
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Nome Completo do Líder (ex: João Silva)"
+              value={formData.liderNomeCompleto}
+              onChange={(e) => handleInputChange('liderNomeCompleto', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 rounded-lg ${formErrors.liderNomeCompleto ? 'border-red-500' : ''}`}
+              style={{ '--tw-ring-color': accentColor } as React.CSSProperties}
+              onFocus={(e) => e.target.style.borderColor = accentColor}
+              onBlur={(e) => e.target.style.borderColor = ''}
+              required
+            />
+          </div>
+          {formErrors.liderNomeCompleto && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.liderNomeCompleto}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Campo WhatsApp do Líder */}
+        <div className="space-y-1">
+          <div className="relative">
+            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="tel"
+              placeholder="WhatsApp do Líder (62) 99999-9999"
+              value={formData.liderWhatsapp}
+              onChange={(e) => handleInputChange('liderWhatsapp', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.liderWhatsapp ? 'border-red-500' : ''}`}
+              maxLength={15}
+              required
+            />
+          </div>
+          {formErrors.liderWhatsapp && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.liderWhatsapp}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Separador */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1 h-px bg-gray-600"></div>
+          <span className="text-white text-sm font-medium">Dados da Pessoa</span>
+          <div className="flex-1 h-px bg-gray-600"></div>
+        </div>
+
+        {/* Campo Nome da Pessoa */}
+        <div className="space-y-1">
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Nome Completo da Pessoa (ex: Maria Silva)"
+              value={formData.pessoaNomeCompleto}
+              onChange={(e) => handleInputChange('pessoaNomeCompleto', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.pessoaNomeCompleto ? 'border-red-500' : ''}`}
+              required
+            />
+          </div>
+          {formErrors.pessoaNomeCompleto && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.pessoaNomeCompleto}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Campo WhatsApp da Pessoa */}
+        <div className="space-y-1">
+          <div className="relative">
+            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="tel"
+              placeholder="WhatsApp da Pessoa (62) 99999-9999"
+              value={formData.pessoaWhatsapp}
+              onChange={(e) => handleInputChange('pessoaWhatsapp', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.pessoaWhatsapp ? 'border-red-500' : ''}`}
+              maxLength={15}
+              required
+            />
+          </div>
+          {formErrors.pessoaWhatsapp && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.pessoaWhatsapp}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Campo CEP */}
+        <div className="space-y-1">
+          <div className="relative">
+            <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="CEP (12345-678) - Opcional"
+              value={formData.cep}
+              onChange={(e) => handleInputChange('cep', e.target.value)}
+              onBlur={handleCepBlur}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.cep ? 'border-red-500' : ''}`}
+              maxLength={9}
+              autoComplete="off"
+            />
+            {cepLoading && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                <div className="w-5 h-5 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          {formErrors.cep && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.cep}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Campo Cidade */}
+        <div className="space-y-1">
+          <div className="relative">
+            <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Cidade (preenchida automaticamente pelo CEP)"
+              value={formData.cidade}
+              onChange={(e) => handleInputChange('cidade', e.target.value)}
+              className={`pl-12 h-12 bg-gray-600 border-gray-600 text-white placeholder-gray-500 rounded-lg cursor-not-allowed ${formErrors.cidade ? 'border-red-500' : ''}`}
+              disabled
+            />
+            {formData.cidade && (
+              <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
+            )}
+          </div>
+          {formErrors.cidade && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.cidade}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Campo Observações */}
+        <div className="space-y-1">
+          <div className="relative">
+            <FileText className="absolute left-4 top-4 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Textarea
+              placeholder="Observações sobre a pessoa..."
+              value={formData.observacoes}
+              onChange={(e) => handleInputChange('observacoes', e.target.value)}
+              className={`pl-12 min-h-[100px] bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.observacoes ? 'border-red-500' : ''}`}
+              required
+            />
+          </div>
+          {formErrors.observacoes && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.observacoes}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Botão Cadastrar */}
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isLoading}
+          className="w-full h-12 bg-[#D4AF37] hover:bg-[#C19B2E] text-white font-semibold text-lg rounded-lg transition-all duration-200"
+        >
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              {editMode ? "Atualizando..." : "Cadastrando..."}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              {editMode ? "Atualizar Cadastro" : "Finalizar Cadastro"}
+            </div>
+          )}
+        </Button>
+
+      </div>
+
+      {/* Rodapé */}
+    
     </div>
   );
 }

@@ -145,13 +145,18 @@ export const useCampaigns = () => {
     }
   }
 
+  const getCampaignByCode = useCallback((code: string): Campaign | null => {
+    return campaigns.find(c => c.code === code) || null
+  }, [campaigns])
+
   return {
     campaigns,
     loading,
     error,
     fetchCampaigns,
     deleteCampaign,
-    toggleCampaignStatus
+    toggleCampaignStatus,
+    getCampaignByCode
   }
 }
 
