@@ -37,14 +37,14 @@ export default function PaidContracts() {
   
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, loading } = useAuth();
 
-  // Proteção de rota - redirecionar para login se não estiver autenticado
+  // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   const { 
     contracts, 

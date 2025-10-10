@@ -72,6 +72,28 @@ export default function Dashboard() {
     // Retorna como está se não conseguir formatar
     return phone;
   };
+
+  // Função para formatar telefone para exportação Excel (formato: 556293628028)
+  const formatPhoneForExport = (phone: string) => {
+    if (!phone) return '';
+    
+    // Remove todos os caracteres não numéricos
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // Se já começa com 55, remove para processar
+    if (cleaned.startsWith('55')) {
+      cleaned = cleaned.substring(2);
+    }
+    
+    // Se tem 11 dígitos (DDD + 9 + 8 dígitos), remove o 9
+    if (cleaned.length === 11 && cleaned.charAt(2) === '9') {
+      cleaned = cleaned.substring(0, 2) + cleaned.substring(3);
+    }
+    
+    // Se tem 10 dígitos (DDD + 8 dígitos), mantém como está
+    // Retorna sempre com 55 no início
+    return '55' + cleaned;
+  };
   
   const [userLink, setUserLink] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -100,14 +122,17 @@ export default function Dashboard() {
   const [itemsPerPage] = useState(50); // 50 itens por página para melhor performance com grandes volumes
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports } = useAuth();
+  const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports, loading } = useAuth();
 
-  // Proteção de rota - redirecionar para login se não estiver autenticado
+  // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
-    if (!user) {
+    // Verificar se há dados de usuário no localStorage antes de redirecionar
+    const hasUserInStorage = !!localStorage.getItem('loggedUser')
+    
+    if (!loading && !user && !hasUserInStorage) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   // Estado para armazenar cores da campanha do banco
   const [campaignColors, setCampaignColors] = useState<{
@@ -334,9 +359,9 @@ export default function Dashboard() {
     // Mapear dados para formato Excel com os campos corretos da tabela saude_people
     const dataToExport = filteredSaudePeople.map(person => ({
       'Líder - Nome Completo': person.lider_nome_completo || '',
-      'Líder - WhatsApp': formatPhone(person.lider_whatsapp || ''),
+      'Líder - WhatsApp': formatPhoneForExport(person.lider_whatsapp || ''),
       'Pessoa - Nome Completo': person.pessoa_nome_completo || '',
-      'Pessoa - WhatsApp': formatPhone(person.pessoa_whatsapp || ''),
+      'Pessoa - WhatsApp': formatPhoneForExport(person.pessoa_whatsapp || ''),
       'CEP': person.cep || 'N/A',
       'Cidade': person.cidade || 'N/A',
       'Observações': person.observacoes || '',
@@ -620,6 +645,17 @@ export default function Dashboard() {
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
 
+  // Mostrar loading enquanto verifica autenticação
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-institutional-blue">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Verificando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleLogout = () => {
     logout();

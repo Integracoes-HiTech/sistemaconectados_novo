@@ -13,7 +13,7 @@ import type { Campaign } from "@/hooks/useCampaigns";
 export default function PublicRegisterCampanha() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user, isAdminHitech } = useAuth();
+  const { login, user, isAdminHitech, loading: authLoading } = useAuth();
   const { editMode, campaignData } = (location.state || {}) as { 
     editMode?: boolean; 
     campaignData?: Campaign 
@@ -21,10 +21,18 @@ export default function PublicRegisterCampanha() {
 
   // Proteção de rota - apenas AdminHitech pode acessar
   useEffect(() => {
-    if (!user || !isAdminHitech()) {
+    console.log('🔍 PublicRegisterCampanha - authLoading:', authLoading, 'user:', user?.username, 'isAdminHitech:', isAdminHitech())
+    
+    // Verificar se há dados de usuário no localStorage antes de redirecionar
+    const hasUserInStorage = !!localStorage.getItem('loggedUser')
+    
+    if (!authLoading && (!user || !isAdminHitech()) && !hasUserInStorage) {
+      console.log('🚨 Redirecionando para login - não é AdminHitech')
       navigate('/login');
+    } else if (!authLoading && (!user || !isAdminHitech()) && hasUserInStorage) {
+      console.log('⏳ Usuário no localStorage, aguardando processamento do estado...')
     }
-  }, [user, isAdminHitech, navigate]);
+  }, [user, isAdminHitech, authLoading, navigate]);
 
   const [formData, setFormData] = useState({
     name: "",

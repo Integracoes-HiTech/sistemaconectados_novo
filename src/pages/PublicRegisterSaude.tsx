@@ -18,13 +18,21 @@ export default function PublicRegisterSaude() {
   const { editMode, personData } = (location.state as { editMode?: boolean; personData?: SaudePerson }) || {};
   
   // Proteção de rota - apenas admin3 pode acessar
-  const { user, isAdmin3 } = useAuth();
+  const { user, isAdmin3, loading: authLoading } = useAuth();
   
   useEffect(() => {
-    if (!user || !isAdmin3()) {
+    console.log('🔍 PublicRegisterSaude - authLoading:', authLoading, 'user:', user?.username, 'isAdmin3:', isAdmin3())
+    
+    // Verificar se há dados de usuário no localStorage antes de redirecionar
+    const hasUserInStorage = !!localStorage.getItem('loggedUser')
+    
+    if (!authLoading && (!user || !isAdmin3()) && !hasUserInStorage) {
+      console.log('🚨 Redirecionando para login - não é admin3')
       navigate('/login');
+    } else if (!authLoading && (!user || !isAdmin3()) && hasUserInStorage) {
+      console.log('⏳ Usuário no localStorage, aguardando processamento do estado...')
     }
-  }, [user, isAdmin3, navigate]);
+  }, [user, isAdmin3, authLoading, navigate]);
   
   const [formData, setFormData] = useState({
     liderNomeCompleto: "",

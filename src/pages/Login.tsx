@@ -32,10 +32,8 @@ export default function Login() {
     const result = await login(username, password);
     
     if (result.success) {
-      // Redirecionamento para o dashboard após 1 segundo
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
+      // Redirecionamento imediato para o dashboard
+      navigate("/dashboard");
     } else {
       // Erro já é tratado no hook useAuth, mas podemos adicionar lógica adicional aqui se necessário
     

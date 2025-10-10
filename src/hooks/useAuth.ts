@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast'
 export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [justLoggedIn, setJustLoggedIn] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -21,8 +22,12 @@ export const useAuth = () => {
           localStorage.removeItem('loggedUser')
           setUser(null)
         } else {
-          // Validar se o usuário ainda existe no banco
-          validateUserSession(userData)
+          // Validar se o usuário ainda existe no banco (apenas se não acabou de fazer login)
+          if (!justLoggedIn) {
+            validateUserSession(userData)
+          } else {
+            setJustLoggedIn(false)
+          }
         }
       } catch (error) {
         console.warn('🚨 Erro ao parsear dados do localStorage, removendo...', error)
@@ -31,7 +36,7 @@ export const useAuth = () => {
       }
     }
     setLoading(false)
-  }, [])
+  }, [justLoggedIn])
 
   // Função para validar se a sessão ainda é válida
   const validateUserSession = async (userData: AuthUser) => {
@@ -100,7 +105,7 @@ export const useAuth = () => {
             variant: "destructive",
           });
           setLoading(false);
-          return false;
+          return { success: false, error: "Usuário desativado" };
         }
 
         // VERIFICAR SE USUÁRIO ESTÁ INATIVO
@@ -112,7 +117,7 @@ export const useAuth = () => {
             variant: "destructive",
           });
           setLoading(false);
-          return false;
+          return { success: false, error: "Usuário inativo" };
         }
         // Ativar usuário após login bem-sucedido
         await supabase
@@ -144,6 +149,7 @@ export const useAuth = () => {
           updated_at: data.updated_at
         }
 
+        setJustLoggedIn(true) // Marcar que acabou de fazer login
         setUser(userData)
         localStorage.setItem('loggedUser', JSON.stringify(userData))
         
@@ -151,6 +157,9 @@ export const useAuth = () => {
           title: "Login realizado com sucesso!",
           description: `Bem-vindo, ${data.display_name || data.name}!`,
         })
+
+        // Definir loading como false DEPOIS de retornar, para garantir que o navigate aconteça primeiro
+        setTimeout(() => setLoading(false), 100)
 
         return { success: true, user: userData }
       } else {
@@ -174,9 +183,8 @@ export const useAuth = () => {
         description: errorMessage,
         variant: "destructive",
       })
+      setLoading(false) // Definir loading como false em caso de erro
       return { success: false, error: errorMessage }
-    } finally {
-      setLoading(false)
     }
   }
 

@@ -11,14 +11,14 @@ import { supabase } from '@/lib/supabase';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, logout, canModifyLinkTypes } = useAuth();
+  const { user, logout, canModifyLinkTypes, loading: authLoading } = useAuth();
 
-  // Proteção de rota - redirecionar para login se não estiver autenticado
+  // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
   const { 
     settings, 
     phases,
