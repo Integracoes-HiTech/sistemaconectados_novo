@@ -1,4 +1,16 @@
 {
+  "redirects": [
+    {
+      "source": "/comece-agora.html",
+      "destination": "/comece-agora",
+      "permanent": true
+    },
+    {
+      "source": "/success.html",
+      "destination": "/success",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/comece-agora",
