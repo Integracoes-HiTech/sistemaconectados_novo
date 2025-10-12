@@ -561,6 +561,8 @@
             padding: 2rem;
             transition: all 0.3s;
             position: relative;
+            /* Prevenir mudanças de layout que causam scroll */
+            will-change: auto;
         }
 
         .pricing-card.selected {
@@ -601,13 +603,13 @@
 
         .pricing-card.featured {
             border-color: var(--accent-orange);
-            transform: scale(1.05);
+            transform: translateY(-4px);
             box-shadow: var(--shadow-xl);
         }
 
         .pricing-card.selected {
             border-color: var(--accent-orange);
-            transform: scale(1.05);
+            transform: translateY(-8px);
             box-shadow: var(--shadow-xl);
             background: linear-gradient(135deg, rgba(249, 115, 22, 0.05) 0%, rgba(249, 115, 22, 0.02) 100%);
         }
@@ -1519,6 +1521,9 @@
         const N8N_WEBHOOK_URL = 'https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0';
         const N8N_API_KEY = 'your-n8n-api-key'; // Se necessário
 
+        // Flag para controlar scroll automático durante carregamento
+        let isInitialLoad = true;
+
         // Carregar planos do banco ao iniciar
         async function carregarPlanos() {
             console.log('📋 Carregando planos do banco de dados...');
@@ -1543,6 +1548,12 @@
                 // Renderizar cards de planos
                 renderizarPlanos(planosDisponiveis);
                 
+                // Desabilitar scroll automático após carregamento inicial
+                setTimeout(() => {
+                    isInitialLoad = false;
+                    console.log('🔒 Scroll automático desabilitado após carregamento inicial');
+                }, 1000);
+                
                 return planosDisponiveis;
             } catch (error) {
                 console.error('❌ Erro ao carregar planos:', error);
@@ -1554,6 +1565,13 @@
                     { id: null, nome_plano: 'Avançado', amount: 1500, features: ['Ilimitado', 'Painel completo', 'Mapa', 'Relatórios', 'Suporte 24h'] }
                 ];
                 renderizarPlanos(planosDisponiveis);
+                
+                // Desabilitar scroll automático após carregamento inicial (fallback)
+                setTimeout(() => {
+                    isInitialLoad = false;
+                    console.log('🔒 Scroll automático desabilitado após carregamento inicial (fallback)');
+                }, 1000);
+                
                 return planosDisponiveis;
             }
         }
@@ -1567,6 +1585,9 @@
                 console.error('❌ Container pricingGrid não encontrado');
                 return;
             }
+            
+            // Salvar posição atual do scroll antes de alterar o DOM
+            const currentScrollY = window.scrollY;
             
             // Limpar grid
             pricingGrid.innerHTML = '';
@@ -1616,6 +1637,15 @@
                 card.innerHTML = cardHTML;
                 pricingGrid.appendChild(card);
             });
+            
+            // Restaurar posição do scroll após renderização
+            if (isInitialLoad) {
+                // Só restaurar scroll durante carregamento inicial
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollY);
+                    console.log('📍 Posição do scroll restaurada após renderização');
+                }, 100);
+            }
             
             console.log(`✅ ${planos.length} cards de planos renderizados`);
         }
@@ -1819,10 +1849,17 @@
                 }
             }
             
-            // Scroll suave para o formulário
+            // Scroll suave para o formulário (mais sutil)
             const formSection = document.querySelector('.signup-section');
-            if (formSection) {
-                formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (formSection && !isInitialLoad) {
+                // Scroll mais suave - só se o formulário não estiver visível E não for carregamento inicial
+                const rect = formSection.getBoundingClientRect();
+                if (rect.top > window.innerHeight * 0.3) {
+                    formSection.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'center' // Centraliza em vez de ir para o topo
+                    });
+                }
             }
             
             // Feedback visual - Mostrar mensagem de sucesso
@@ -2208,10 +2245,17 @@
             // Validar se um plano foi selecionado
             if (!selectedPlan || selectedPlan === '') {
                 console.log('❌ Nenhum plano selecionado');
-                // Scroll para a seção de planos
+                // Scroll para a seção de planos (mais suave)
                 const pricingSection = document.querySelector('.pricing-section');
-                if (pricingSection) {
-                    pricingSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (pricingSection && !isInitialLoad) {
+                    // Só faz scroll se a seção não estiver visível E não for carregamento inicial
+                    const rect = pricingSection.getBoundingClientRect();
+                    if (rect.top > window.innerHeight || rect.bottom < 0) {
+                        pricingSection.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'center' 
+                        });
+                    }
                 }
                 
                 // Destacar cards de planos com animação
