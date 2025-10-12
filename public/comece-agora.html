@@ -1529,7 +1529,6 @@
 
         // Carregar planos do banco ao iniciar
         async function carregarPlanos() {
-            console.log('📋 Carregando planos do banco de dados...');
             
             try {
                 const response = await fetch(`${SUPABASE_URL}/rest/v1/planos_precos?is_active=eq.true&order=order_display.asc`, {
@@ -1546,7 +1545,6 @@
                 }
 
                 planosDisponiveis = await response.json();
-                console.log('✅ Planos carregados:', planosDisponiveis);
                 
                 // Renderizar cards de planos
                 renderizarPlanos(planosDisponiveis);
@@ -1554,12 +1552,10 @@
                 // Desabilitar scroll automático após carregamento inicial
                 setTimeout(() => {
                     isInitialLoad = false;
-                    console.log('🔒 Scroll automático desabilitado após carregamento inicial');
                 }, 1000);
                 
                 return planosDisponiveis;
             } catch (error) {
-                console.error('❌ Erro ao carregar planos:', error);
                 // Fallback: planos hardcoded se falhar
                 planosDisponiveis = [
                     { id: null, nome_plano: 'Gratuito', amount: 0, features: ['100 cadastros', 'Painel básico'] },
@@ -1572,7 +1568,6 @@
                 // Desabilitar scroll automático após carregamento inicial (fallback)
                 setTimeout(() => {
                     isInitialLoad = false;
-                    console.log('🔒 Scroll automático desabilitado após carregamento inicial (fallback)');
                 }, 1000);
                 
                 return planosDisponiveis;
@@ -1581,11 +1576,9 @@
 
         // Renderizar cards de planos dinamicamente
         function renderizarPlanos(planos) {
-            console.log('🎨 Renderizando cards de planos...');
             
             const pricingGrid = document.getElementById('pricingGrid');
             if (!pricingGrid) {
-                console.error('❌ Container pricingGrid não encontrado');
                 return;
             }
             
@@ -1646,11 +1639,9 @@
                 // Só restaurar scroll durante carregamento inicial
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollY);
-                    console.log('📍 Posição do scroll restaurada após renderização');
                 }, 100);
             }
             
-            console.log(`✅ ${planos.length} cards de planos renderizados`);
         }
 
         // Função para salvar lead no Supabase
@@ -1722,10 +1713,6 @@
 
         // Função para gerar link de pagamento via N8N
         async function generatePaymentLinkViaN8n(leadData, planDetails) {
-            console.log('🌐 === INICIANDO CHAMADA N8N ===');
-            console.log('📋 Lead Data recebido:', leadData);
-            console.log('📋 Plan Details recebido:', planDetails);
-            console.log('🆔 Lead ID a ser enviado:', leadData.id);
             
             try {
                 // ENVIAR SOMENTE O lead_id
@@ -1734,15 +1721,7 @@
                     lead_id: leadData.id
                 };
 
-                console.log('📤 Payload preparado para N8N (SOMENTE lead_id):', paymentRequest);
-                console.log('🔗 URL do webhook:', N8N_WEBHOOK_URL);
-                console.log('⚠️ O webhook deve buscar os dados no banco usando o lead_id');
-                console.log('🔄 Enviando requisição POST...');
 
-                console.log('📡 Fazendo requisição fetch...');
-                console.log('📡 URL:', N8N_WEBHOOK_URL);
-                console.log('📡 Method: POST');
-                console.log('📡 Body:', JSON.stringify(paymentRequest));
                 
                 const response = await fetch(N8N_WEBHOOK_URL, {
                     method: 'POST',
@@ -1753,10 +1732,6 @@
                     body: JSON.stringify(paymentRequest)
                 });
 
-                console.log('✅ Requisição enviada!');
-                console.log('📡 Resposta do N8N:');
-                console.log('  - Status:', response.status);
-                console.log('  - Status Text:', response.statusText);
                 console.log('  - OK:', response.ok);
                 console.log('  - Response Object:', response);
 
