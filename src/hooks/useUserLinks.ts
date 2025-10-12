@@ -316,8 +316,9 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         }
       }
 
-      // Gerar linkId único baseado no userId
-      const linkId = `user-${userId}`
+      // Gerar linkId único baseado nos primeiros 8 caracteres do userId (mais curto)
+      const shortId = userId.substring(0, 8)
+      const linkId = `user-${shortId}`
       
       return await createUserLink(userId, linkId, referrerName, expiresAt)
     } catch (err) {
