@@ -1753,33 +1753,18 @@
                     body: JSON.stringify(paymentRequest)
                 });
 
-                console.log('  - OK:', response.ok);
-                console.log('  - Response Object:', response);
 
                 if (!response.ok) {
-                    console.error('❌ Resposta não OK! Status:', response.status);
                     try {
                         const errorText = await response.text();
-                        console.error('❌ Resposta de erro (text):', errorText);
                         const errorData = JSON.parse(errorText);
-                        console.error('❌ Resposta de erro (JSON):', errorData);
                         throw new Error(`Erro na API do N8N: ${errorData.message || response.statusText}`);
                     } catch (parseError) {
-                        console.error('❌ Não foi possível parsear erro:', parseError);
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
                 }
 
-                console.log('✅ Resposta OK! Parseando JSON...');
                 const data = await response.json();
-                console.log('✅ Dados recebidos do N8N:', data);
-                console.log('📋 Dados extraídos:');
-                console.log('  - LinkToCheckout (ASAAS):', data.LinkToCheckout);
-                console.log('  - ClientId (ASAAS):', data.ClientId);
-                console.log('  - payment_id:', data.payment_id || data.id);
-                console.log('  - payment_url:', data.payment_url || data.url || data.link);
-                console.log('  - due_date:', data.due_date || data.dueDate);
-                console.log('  - status:', data.status || 'pending');
                 
                 const result = {
                     success: true,
@@ -1789,28 +1774,11 @@
                     status: data.status || 'pending'
                 };
                 
-                console.log('✅ Resultado final a retornar:', result);
                 return result;
             } catch (error) {
-                console.error('💥 ERRO no generatePaymentLinkViaN8n:', error);
-                console.error('💥 Error message:', error.message);
-                console.error('💥 Error stack:', error.stack);
-                console.error('💥 Error name:', error.name);
-                console.error('💥 Error tipo:', typeof error);
                 
                 // Diagnóstico do erro
                 if (error.message === 'Failed to fetch') {
-                    console.error('🚨 ERRO DE CONEXÃO DETECTADO!');
-                    console.error('🚨 Possíveis causas:');
-                    console.error('  1. CORS - O webhook N8N está bloqueando requisições do navegador');
-                    console.error('  2. HTTPS/HTTP - Você está em localhost (HTTP) tentando acessar HTTPS');
-                    console.error('  3. Firewall/Antivírus - Está bloqueando a requisição');
-                    console.error('  4. Webhook offline - O N8N não está rodando');
-                    console.error('');
-                    console.error('🔧 SOLUÇÃO:');
-                    console.error('  O webhook N8N precisa ter CORS habilitado para aceitar requisições do navegador');
-                    console.error('  Acesse: https://n8n.admin.hitechdesenvolvimento.com.br/');
-                    console.error('  Configure o webhook para permitir origem: *');
                 }
                 
                 return {
@@ -1825,7 +1793,6 @@
             selectedPlanId = planId;  // ID do banco
             selectedPlan = planName;   // Nome para exibição
             
-            console.log('📋 Plano selecionado:', { id: planId, nome: planName });
             
             document.getElementById('planoSelecionado').value = planName;
             
@@ -2114,14 +2081,11 @@
 
         // Função para obter detalhes do plano (do banco)
         function getPlanDetails(planId) {
-            console.log('🔍 Buscando detalhes do plano:', planId);
-            console.log('📋 Planos disponíveis:', planosDisponiveis);
             
             // Buscar plano no array carregado do banco
             const plano = planosDisponiveis.find(p => p.id === planId);
             
             if (plano) {
-                console.log('✅ Plano encontrado:', plano);
                 return {
                     id: plano.id,
                     name: plano.nome_plano,
@@ -2133,7 +2097,6 @@
                 };
             }
             
-            console.warn('⚠️ Plano não encontrado, usando fallback');
             // Fallback se não encontrar
             return {
                 id: planId,
@@ -2148,22 +2111,13 @@
 
         // Função para processar pagamento
         async function processPayment(leadData) {
-            console.log('⚙️ processPayment chamado!');
-            console.log('📋 leadData recebido:', leadData);
-            console.log('📋 selectedPlanId:', selectedPlanId);
-            console.log('📋 selectedPlan:', selectedPlan);
             
             const planDetails = getPlanDetails(selectedPlanId);  // Usa ID do banco
-            console.log('📋 planDetails (do banco):', planDetails);
-            console.log('💰 Preço do plano:', planDetails.price);
-            console.log('❓ É gratuito?', planDetails.price === 0);
             
             if (planDetails.price === 0) {
-                console.log('🆓 Plano gratuito detectado - chamando createFreeAccess');
                 // Plano gratuito - criar acesso direto
                 return await createFreeAccess(leadData);
             } else {
-                console.log('💳 Plano pago detectado - chamando createPaidPayment');
                 // Plano pago - processar pagamento
                 return await createPaidPayment(leadData, planDetails);
             }
@@ -2191,39 +2145,29 @@
 
         // Função para criar pagamento pago
         async function createPaidPayment(leadData, planDetails) {
-            console.log('💳 Iniciando createPaidPayment...');
-            console.log('📋 leadData:', leadData);
-            console.log('📋 planDetails:', planDetails);
             
             try {
                 // 1. Salvar lead no banco PRIMEIRO para pegar o ID
-                console.log('💾 Salvando lead no banco...');
                 const saveResult = await saveLeadToDatabase(leadData);
                 
                 if (!saveResult.success) {
-                    console.log('❌ Erro ao salvar lead:', saveResult.error);
                     throw new Error(saveResult.error || 'Erro ao salvar lead');
                 }
                 
                 leadId = saveResult.leadId;
-                console.log('✅ Lead salvo com ID:', leadId);
                 
                 // 2. Gerar link de pagamento via N8N (enviando o ID do banco)
-                console.log('🌐 Gerando link de pagamento via N8N...');
                 const paymentLinkResult = await generatePaymentLinkViaN8n({
                     ...leadData,
                     id: leadId  // ID do banco para o webhook identificar
                 }, planDetails);
                 
                 if (!paymentLinkResult.success) {
-                    console.log('❌ Erro ao gerar link:', paymentLinkResult.error);
                     throw new Error(paymentLinkResult.error || 'Erro ao gerar link de pagamento');
                 }
                 
-                console.log('✅ Link de pagamento gerado:', paymentLinkResult.payment_url);
                 
                 // 3. Salvar dados do pagamento no banco
-                console.log('💾 Salvando dados do pagamento no banco...');
                 const paymentRecord = {
                     lead_id: leadId,
                     payment_gateway: 'asaas',
@@ -2236,18 +2180,14 @@
                     due_date: paymentLinkResult.due_date
                 };
                 
-                console.log('📋 Dados do pagamento:', paymentRecord);
                 
                 const paymentResult = await savePaymentToDatabase(paymentRecord);
                 
                 if (!paymentResult.success) {
-                    console.log('⚠️ Aviso: Erro ao salvar pagamento no banco, mas continuando:', paymentResult.error);
                     // Erro ao salvar pagamento - continuar mesmo assim
                 } else {
-                    console.log('✅ Pagamento salvo no banco com ID:', paymentResult.paymentId);
                 }
                 
-                console.log('✅ createPaidPayment concluído com sucesso!');
                 
                 return { 
                     success: true, 
@@ -2264,17 +2204,11 @@
 
         // Função principal de envio do formulário
         async function handleFormSubmit(event) {
-            console.log('🚀 Iniciando envio do formulário...');
-            console.log('🔧 Event:', event);
             event.preventDefault();
             
-            console.log('📋 Plano selecionado:', selectedPlan);
-            console.log('📋 Tipo de plano:', typeof selectedPlan);
-            console.log('📋 selectedPlan vazio?', selectedPlan === '' || !selectedPlan);
             
             // Validar se um plano foi selecionado
             if (!selectedPlan || selectedPlan === '') {
-                console.log('❌ Nenhum plano selecionado');
                 // Scroll para a seção de planos (mais suave)
                 const pricingSection = document.querySelector('.pricing-section');
                 if (pricingSection && !isInitialLoad) {
@@ -2339,13 +2273,10 @@
                 plano_escolhido: selectedPlan
             };
 
-            console.log('📝 Dados coletados do formulário:', formData);
 
 
             // Validar dados obrigatórios
-            console.log('🔍 Validando campos obrigatórios...');
             if (!formData.nome_completo || !formData.cpf_cnpj || !formData.whatsapp || !formData.email) {
-                console.log('❌ Campos obrigatórios não preenchidos');
                 showValidationError('Por favor, preencha todos os campos obrigatórios.');
                 return;
             }
@@ -2357,22 +2288,17 @@
             }
 
             // Validar CPF/CNPJ
-            console.log('🔍 Validando CPF/CNPJ:', formData.cpf_cnpj);
             if (!validateDocumentValue(formData.cpf_cnpj)) {
-                console.log('❌ CPF/CNPJ inválido');
                 showValidationError('CPF ou CNPJ inválido.');
                 return;
             }
 
             // Validar telefone
-            console.log('🔍 Validando telefone:', formData.whatsapp);
             if (!validatePhone(formData.whatsapp)) {
-                console.log('❌ Telefone inválido');
                 showValidationError('Telefone inválido. Digite um número válido com DDD (10 ou 11 dígitos).');
                 return;
             }
 
-            console.log('✅ Todas as validações passaram');
 
             // Mostrar loading
             const submitBtn = document.getElementById('submitBtn');
@@ -2384,19 +2310,14 @@
             submitLoading.style.display = 'inline';
 
             try {
-                console.log('💳 Iniciando processamento do pagamento...');
                 // Processar pagamento
                 const result = await processPayment(formData);
                 
-                console.log('📊 Resultado do processamento:', result);
                 
                 if (result.success) {
-                    console.log('✅ Pagamento processado com sucesso');
-                    console.log('📋 Resultado:', result);
                     
                     // Verificar se é plano gratuito
                     if (result.isFree) {
-                        console.log('🎉 Plano gratuito - mostrando mensagem de sucesso');
                         // Aqui poderia mostrar uma mensagem ou redirecionar para outra página
                         alert('✅ Cadastro realizado com sucesso! Em breve você receberá as informações de acesso.');
                         return;
@@ -2404,13 +2325,10 @@
                     
                     // Para planos pagos, redirecionar DIRETO para o link de checkout do ASAAS
                     if (result.paymentUrl) {
-                        console.log('💳 Redirecionando DIRETAMENTE para checkout ASAAS...');
-                        console.log('🔗 URL:', result.paymentUrl);
                         
                         // Redirecionar para o checkout do ASAAS
                         window.location.href = result.paymentUrl;
                     } else {
-                        console.error('❌ ERRO: Link de pagamento não foi gerado!');
                         alert('Erro ao gerar link de pagamento. Por favor, entre em contato com o suporte.');
                     }
                     
@@ -2476,7 +2394,6 @@
                             </div>
                             ${result.paymentUrl ? `
                                 <div style="margin: 20px 0;">
-                                    <a href="${result.paymentUrl}" target="_blank" onclick="console.log('🔗 Redirecionando para:', '${result.paymentUrl}')" style="
                                         display: inline-block;
                                         background: linear-gradient(135deg, #10B981, #059669);
                                         color: white;
@@ -2544,15 +2461,8 @@
                     */ // FIM DO CÓDIGO ANTIGO (MODAL) - REMOVIDO
                     
                 } else {
-                    console.error('❌❌❌ ERRO NO PROCESSAMENTO ❌❌❌');
-                    console.error('📋 Resultado completo:', result);
-                    console.error('❌ Mensagem de erro:', result.error);
-                    console.error('❌ result.success:', result.success);
-                    console.error('❌ result.isFree:', result.isFree);
-                    console.error('❌ result.paymentUrl:', result.paymentUrl);
                     
                     // NÃO MOSTRAR MODAL DE ERRO - Sistema processa silenciosamente
-                    console.log('📋 Erro registrado no console, sem modal');
                     
                     return; // Fim - sem modal de erro
                     
@@ -2622,10 +2532,8 @@
                     */ // FIM DO CÓDIGO ANTIGO (MODAL DE ERRO) - REMOVIDO
                 }
             } catch (error) {
-                console.error('💥 Erro crítico no envio:', error);
                 
                 // NÃO MOSTRAR MODAL DE ERRO CRÍTICO - Sistema processa silenciosamente
-                console.log('📋 Erro crítico registrado no console, sem modal');
                 
                 return; // Fim - sem modal de erro crítico
                 
@@ -2769,33 +2677,26 @@
 
         // Adicionar event listeners
         document.addEventListener('DOMContentLoaded', async function() {
-            console.log('🚀 DOM carregado, configurando event listeners...');
             
             // Carregar planos do banco
             await carregarPlanos();
             
             // Event listener para o formulário
             const form = document.querySelector('form');
-            console.log('📋 Formulário encontrado:', form);
             
             if (form) {
                 form.addEventListener('submit', handleFormSubmit);
-                console.log('✅ Event listener adicionado ao formulário');
                 
                 // Também adicionar listener direto no botão como backup
                 const submitBtn = document.getElementById('submitBtn');
                 if (submitBtn) {
                     submitBtn.addEventListener('click', function(e) {
-                        console.log('🔘 Botão clicado!');
                         e.preventDefault();
                         handleFormSubmit(e);
                     });
-                    console.log('✅ Event listener adicionado ao botão');
                 } else {
-                    console.error('❌ Botão submit não encontrado!');
                 }
             } else {
-                console.error('❌ Formulário não encontrado!');
             }
 
             // Verificar periodicamente se plano foi selecionado
@@ -2823,19 +2724,14 @@
             
             // Teste manual - adicionar função global para debug
             window.testForm = function() {
-                console.log('🧪 Teste manual iniciado...');
-                console.log('📋 selectedPlan:', selectedPlan);
-                console.log('📋 leadId:', leadId);
                 
                 // Simular evento de submit
                 const fakeEvent = {
-                    preventDefault: function() { console.log('🔄 preventDefault chamado'); }
                 };
                 
                 handleFormSubmit(fakeEvent);
             };
             
-            console.log('🧪 Função de teste disponível: window.testForm()');
 
             // Event listeners para máscaras e validações
             const cepInput = document.getElementById('cep');
