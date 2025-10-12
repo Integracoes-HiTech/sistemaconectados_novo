@@ -28,6 +28,8 @@ export interface Member {
   can_be_replaced: boolean
   // Campo para distinguir membros de amigos
   is_friend?: boolean
+  // Campo para plano de preço
+  plano_preco_id?: string | null
   // Campo para soft delete
   deleted_at?: string | null
   created_at: string
