@@ -47,7 +47,7 @@ Este documento descreve o fluxo completo de pagamento da landing page, desde o p
    - Exemplo: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 2. 🌐 CHAMAR WEBHOOK N8N
-   - URL: https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/...
+   - URL: https://n8n.admin.hitechdesenvolvimento.com.br/webhook/...
    - Method: POST
    - Body: {
        lead_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"  ⬅️ SOMENTE O ID

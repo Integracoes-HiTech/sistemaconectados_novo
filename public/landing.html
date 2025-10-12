@@ -1516,7 +1516,7 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y';
         
         // Configurações do N8N
-        const N8N_WEBHOOK_URL = 'https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0';
+        const N8N_WEBHOOK_URL = 'https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0';
         const N8N_API_KEY = 'your-n8n-api-key'; // Se necessário
 
         // Carregar planos do banco ao iniciar
@@ -1745,6 +1745,8 @@
                 const data = await response.json();
                 console.log('✅ Dados recebidos do N8N:', data);
                 console.log('📋 Dados extraídos:');
+                console.log('  - LinkToCheckout (ASAAS):', data.LinkToCheckout);
+                console.log('  - ClientId (ASAAS):', data.ClientId);
                 console.log('  - payment_id:', data.payment_id || data.id);
                 console.log('  - payment_url:', data.payment_url || data.url || data.link);
                 console.log('  - due_date:', data.due_date || data.dueDate);
@@ -1752,8 +1754,8 @@
                 
                 const result = {
                     success: true,
-                    payment_id: data.payment_id || data.id,
-                    payment_url: data.payment_url || data.url || data.link,
+                    payment_id: data.ClientId || data.payment_id || data.id,
+                    payment_url: data.LinkToCheckout || data.payment_url || data.url || data.link,
                     due_date: data.due_date || data.dueDate,
                     status: data.status || 'pending'
                 };
@@ -2312,37 +2314,25 @@
                     console.log('✅ Pagamento processado com sucesso');
                     console.log('📋 Resultado:', result);
                     
-                    // Redirecionar para página de sucesso com os dados
-                    const planDetails = getPlanDetails(selectedPlanId);  // Usa ID do banco
+                    // Verificar se é plano gratuito
+                    if (result.isFree) {
+                        console.log('🎉 Plano gratuito - mostrando mensagem de sucesso');
+                        // Aqui poderia mostrar uma mensagem ou redirecionar para outra página
+                        alert('✅ Cadastro realizado com sucesso! Em breve você receberá as informações de acesso.');
+                        return;
+                    }
                     
-                    // Construir URL com parâmetros
-                    const params = new URLSearchParams({
-                        lead_id: result.leadId || '',
-                        plano_preco_id: selectedPlanId || '',  // ✅ ID do plano (do banco)
-                        plan: planDetails.name || selectedPlan,
-                        amount: planDetails.price || 0
-                    });
-                    
-                    // Adicionar payment_url se existir
+                    // Para planos pagos, redirecionar DIRETO para o link de checkout do ASAAS
                     if (result.paymentUrl) {
-                        params.append('payment_url', result.paymentUrl);
+                        console.log('💳 Redirecionando DIRETAMENTE para checkout ASAAS...');
+                        console.log('🔗 URL:', result.paymentUrl);
+                        
+                        // Redirecionar para o checkout do ASAAS
+                        window.location.href = result.paymentUrl;
+                    } else {
+                        console.error('❌ ERRO: Link de pagamento não foi gerado!');
+                        alert('Erro ao gerar link de pagamento. Por favor, entre em contato com o suporte.');
                     }
-                    
-                    // Adicionar payment_id se existir
-                    if (result.paymentId) {
-                        params.append('payment_id', result.paymentId);
-                    }
-                    
-                    // Adicionar due_date se existir
-                    if (result.dueDate) {
-                        params.append('due_date', result.dueDate);
-                    }
-                    
-                    console.log('🔗 Redirecionando para página de sucesso...');
-                    console.log('📋 Parâmetros:', params.toString());
-                    
-                    // Redirecionar
-                    window.location.href = '/sucesso.html?' + params.toString();
                     
                     return;
                     

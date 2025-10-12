@@ -108,7 +108,7 @@ Enquanto configura o CORS, você pode usar um proxy:
 Abra o **DevTools Console** e execute:
 
 ```javascript
-fetch('https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0', {
+fetch('https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -130,7 +130,7 @@ fetch('https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36
 ### **2. Teste com cURL (Bypassa CORS):**
 
 ```bash
-curl -X POST https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0 \
+curl -X POST https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0 \
   -H "Content-Type: application/json" \
   -d '{"lead_id":"test-123"}'
 ```
@@ -142,7 +142,7 @@ curl -X POST https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0c
 
 ### **3. Teste com Postman/Insomnia:**
 
-- **URL:** `https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0`
+- **URL:** `https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0`
 - **Method:** POST
 - **Headers:** `Content-Type: application/json`
 - **Body:**

@@ -6,7 +6,7 @@ Adicione estas variáveis no seu arquivo `.env` ou `.env.local`:
 
 ```env
 # N8N Configuration
-REACT_APP_N8N_WEBHOOK_URL=https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0
+REACT_APP_N8N_WEBHOOK_URL=https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0
 REACT_APP_N8N_API_KEY=your-n8n-api-key-here
 
 # ASAAS Configuration (via N8N)
