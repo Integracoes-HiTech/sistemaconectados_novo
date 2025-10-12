@@ -2377,7 +2377,7 @@
                         // Redirecionar para o checkout do ASAAS
                         window.location.href = result.paymentUrl;
                     } else {
-                        alert('Erro ao gerar link de pagamento. Por favor, entre em contato com o suporte.');
+                        showValidationError('Erro ao gerar link de pagamento. Tente novamente em alguns instantes.');
                     }
                     
                     return;
@@ -2510,9 +2510,11 @@
                     
                 } else {
                     
-                    // NÃO MOSTRAR MODAL DE ERRO - Sistema processa silenciosamente
+                    // Mostrar toast de erro
+                    const errorMessage = result.error || 'Não foi possível processar seu cadastro. Tente novamente.';
+                    showValidationError(errorMessage);
                     
-                    return; // Fim - sem modal de erro
+                    return; // Fim
                     
                     // CÓDIGO ANTIGO (MODAL DE ERRO) - REMOVIDO
                     /* const errorDiv = document.createElement('div');
@@ -2581,9 +2583,10 @@
                 }
             } catch (error) {
                 
-                // NÃO MOSTRAR MODAL DE ERRO CRÍTICO - Sistema processa silenciosamente
+                // Mostrar toast de erro crítico
+                showValidationError('Erro inesperado. Por favor, tente novamente.');
                 
-                return; // Fim - sem modal de erro crítico
+                return; // Fim
                 
                 // CÓDIGO ANTIGO (MODAL DE ERRO CRÍTICO) - REMOVIDO
                 /* const errorDiv = document.createElement('div');
