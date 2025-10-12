@@ -1861,24 +1861,16 @@
                 }
             }
             
-            // Scroll suave para o formulário (sempre que usuário clicar)
-            const formSection = document.querySelector('.signup-section');
-            if (formSection) {
-                // Aguardar um pouco para garantir que o card foi selecionado visualmente
-                setTimeout(() => {
-                    // Calcular posição ideal (com offset para mobile)
-                    const isMobile = window.innerWidth <= 768;
-                    const offset = isMobile ? 80 : 100; // Offset menor em mobile
-                    
-                    const elementPosition = formSection.getBoundingClientRect().top + window.pageYOffset;
-                    const offsetPosition = elementPosition - offset;
-                    
-                    window.scrollTo({
-                        top: offsetPosition,
-                        behavior: 'smooth'
+            // Scroll suave para o formulário
+            setTimeout(() => {
+                const formSection = document.querySelector('.signup-section');
+                if (formSection) {
+                    formSection.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start'
                     });
-                }, 300); // Delay de 300ms para melhor UX
-            }
+                }
+            }, 300);
             
             // Feedback visual - Mostrar mensagem de sucesso (adaptado para mobile)
             const messageDiv = document.createElement('div');
