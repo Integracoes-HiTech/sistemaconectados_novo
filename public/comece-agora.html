@@ -1861,9 +1861,9 @@
                 }
             }
             
-            // Scroll suave para o formulário
+            // Scroll suave para o formulário (sempre que usuário clicar)
             const formSection = document.querySelector('.signup-section');
-            if (formSection && !isInitialLoad) {
+            if (formSection) {
                 // Aguardar um pouco para garantir que o card foi selecionado visualmente
                 setTimeout(() => {
                     // Calcular posição ideal (com offset para mobile)
@@ -1877,7 +1877,7 @@
                         top: offsetPosition,
                         behavior: 'smooth'
                     });
-                }, 200); // Delay de 200ms para melhor UX
+                }, 300); // Delay de 300ms para melhor UX
             }
             
             // Feedback visual - Mostrar mensagem de sucesso (adaptado para mobile)
