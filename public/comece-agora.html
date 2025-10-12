@@ -744,11 +744,11 @@
             cursor: not-allowed;
         }
 
-        .form-input:valid {
+        .form-input:valid:not(:placeholder-shown) {
             border-color: #10B981;
         }
 
-        .form-input:invalid {
+        .form-input:invalid:not(:placeholder-shown):not(:focus) {
             border-color: #EF4444;
         }
 
@@ -813,6 +813,29 @@
         @keyframes fadeOut {
             from { opacity: 1; }
             to { opacity: 0; }
+        }
+
+        /* Animações para toast */
+        @keyframes slideInUp {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutDown {
+            from {
+                transform: translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(100px);
+                opacity: 0;
+            }
         }
 
         .color-input-group {
@@ -2610,68 +2633,47 @@
             }
         }
 
-        // Função para mostrar erro de validação
+        // Função para mostrar erro de validação (toast discreto)
         function showValidationError(message) {
-            const errorDiv = document.createElement('div');
-            errorDiv.style.cssText = `
+            const toast = document.createElement('div');
+            toast.style.cssText = `
                 position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
+                bottom: 24px;
+                right: 24px;
                 background: linear-gradient(135deg, #EF4444, #DC2626);
                 color: white;
-                padding: 32px 48px;
-                border-radius: 16px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                padding: 16px 20px;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
                 z-index: 10001;
-                text-align: center;
-                max-width: 400px;
-                animation: slideInRight 0.3s ease-out;
+                max-width: 320px;
+                animation: slideInUp 0.3s ease-out;
+                font-size: 14px;
+                line-height: 1.5;
             `;
             
-            errorDiv.innerHTML = `
-                <div style="font-size: 64px; margin-bottom: 24px;">⚠️</div>
-                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 16px; color: white;">
-                    Atenção
-                </h2>
-                <p style="font-size: 16px; margin-bottom: 20px; line-height: 1.5;">
-                    ${message}
-                </p>
-                <div style="background: rgba(255, 255, 255, 0.2); padding: 16px; border-radius: 12px; margin: 20px 0;">
-                    <p style="font-size: 14px; margin: 0;">
-                        📝 <strong>Dica:</strong><br>
-                        Verifique os campos destacados em vermelho<br>
-                        e preencha todas as informações necessárias
-                    </p>
+            toast.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="font-size: 20px; flex-shrink: 0;">⚠️</div>
+                    <div style="flex: 1;">
+                        <strong style="display: block; margin-bottom: 4px;">Atenção</strong>
+                        <span style="opacity: 0.95;">${message}</span>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" 
+                            style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0; margin-left: 8px; opacity: 0.7; transition: opacity 0.2s;"
+                            onmouseover="this.style.opacity='1'"
+                            onmouseout="this.style.opacity='0.7'">
+                        ×
+                    </button>
                 </div>
-                <p style="font-size: 14px; opacity: 0.9;">
-                    Corrija os dados e tente novamente! ✨
-                </p>
             `;
             
-            document.body.appendChild(errorDiv);
+            document.body.appendChild(toast);
             
-            // Overlay escuro
-            const overlay = document.createElement('div');
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.7);
-                z-index: 10000;
-                animation: fadeIn 0.3s ease-out;
-            `;
-            document.body.appendChild(overlay);
-            
+            // Auto-fechar após 5 segundos
             setTimeout(() => {
-                errorDiv.style.animation = 'slideOutRight 0.3s ease-out';
-                overlay.style.animation = 'fadeOut 0.3s ease-out';
-                setTimeout(() => {
-                    errorDiv.remove();
-                    overlay.remove();
-                }, 300);
+                toast.style.animation = 'slideOutDown 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
             }, 5000);
         }
 
@@ -2769,6 +2771,8 @@
             const nomeCompletoInput = document.getElementById('nomeCompleto');
             if (nomeCompletoInput) {
                 nomeCompletoInput.addEventListener('input', function() {
+                    // Remover números e caracteres especiais, manter apenas letras, espaços e acentos
+                    this.value = this.value.replace(/[^A-Za-zÀ-ÿ\s]/g, '');
                     validateFullName(this.value);
                 });
                 
