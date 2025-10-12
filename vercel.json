@@ -1,5 +1,16 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/comece-agora",
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/success",
+      "destination": "/sucesso.html"
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": "/" 
+    }
   ]
 }
