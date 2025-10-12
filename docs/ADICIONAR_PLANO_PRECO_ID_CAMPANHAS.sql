@@ -28,6 +28,10 @@ ADD COLUMN IF NOT EXISTS plano_preco_id UUID REFERENCES planos_precos(id) ON DEL
 ALTER TABLE user_links 
 ADD COLUMN IF NOT EXISTS plano_preco_id UUID REFERENCES planos_precos(id) ON DELETE SET NULL;
 
+-- Adicionar plano_preco_id na tabela campaigns
+ALTER TABLE campaigns 
+ADD COLUMN IF NOT EXISTS plano_preco_id UUID REFERENCES planos_precos(id) ON DELETE SET NULL;
+
 -- =====================================================
 -- 2. CRIAR ÍNDICES PARA PERFORMANCE
 -- =====================================================
@@ -38,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_members_plano_preco_id ON members(plano_preco_id)
 CREATE INDEX IF NOT EXISTS idx_friends_plano_preco_id ON friends(plano_preco_id);
 CREATE INDEX IF NOT EXISTS idx_users_plano_preco_id ON users(plano_preco_id);
 CREATE INDEX IF NOT EXISTS idx_user_links_plano_preco_id ON user_links(plano_preco_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_plano_preco_id ON campaigns(plano_preco_id);
 
 -- Índices compostos para filtros combinados (campaign + plano_preco_id)
 CREATE INDEX IF NOT EXISTS idx_auth_users_campaign_plano ON auth_users(campaign, plano_preco_id);
@@ -45,6 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_members_campaign_plano ON members(campaign, plano
 CREATE INDEX IF NOT EXISTS idx_friends_campaign_plano ON friends(campaign, plano_preco_id);
 CREATE INDEX IF NOT EXISTS idx_users_campaign_plano ON users(campaign, plano_preco_id);
 CREATE INDEX IF NOT EXISTS idx_user_links_campaign_plano ON user_links(campaign, plano_preco_id);
+
+-- Índice composto para campaigns (code + plano_preco_id)
+CREATE INDEX IF NOT EXISTS idx_campaigns_code_plano ON campaigns(code, plano_preco_id);
 
 -- =====================================================
 -- 3. ADICIONAR COMENTÁRIOS PARA DOCUMENTAÇÃO
@@ -55,6 +63,7 @@ COMMENT ON COLUMN members.plano_preco_id IS 'ID do plano de preço da campanha d
 COMMENT ON COLUMN friends.plano_preco_id IS 'ID do plano de preço da campanha deste amigo';
 COMMENT ON COLUMN users.plano_preco_id IS 'ID do plano de preço da campanha deste usuário público';
 COMMENT ON COLUMN user_links.plano_preco_id IS 'ID do plano de preço da campanha deste link';
+COMMENT ON COLUMN campaigns.plano_preco_id IS 'ID do plano de preço contratado para esta campanha';
 
 -- =====================================================
 -- 4. CRIAR FUNÇÃO PARA VINCULAR PLANO AO CRIAR USUÁRIO
@@ -176,7 +185,7 @@ SELECT
     data_type,
     is_nullable
 FROM information_schema.columns 
-WHERE table_name IN ('auth_users', 'members', 'friends', 'users', 'user_links')
+WHERE table_name IN ('auth_users', 'members', 'friends', 'users', 'user_links', 'campaigns')
     AND column_name = 'plano_preco_id'
 ORDER BY table_name;
 
@@ -203,7 +212,7 @@ SELECT
     indexname,
     indexdef
 FROM pg_indexes
-WHERE tablename IN ('auth_users', 'members', 'friends', 'users', 'user_links')
+WHERE tablename IN ('auth_users', 'members', 'friends', 'users', 'user_links', 'campaigns')
     AND indexdef LIKE '%plano_preco_id%'
 ORDER BY tablename, indexname;
 
@@ -242,6 +251,13 @@ SELECT
     COUNT(*) FILTER (WHERE plano_preco_id IS NULL) as sem_plano,
     COUNT(*) as total
 FROM user_links
+UNION ALL
+SELECT 
+    'campaigns' as tabela,
+    COUNT(*) FILTER (WHERE plano_preco_id IS NOT NULL) as com_plano,
+    COUNT(*) FILTER (WHERE plano_preco_id IS NULL) as sem_plano,
+    COUNT(*) as total
+FROM campaigns
 ORDER BY tabela;
 
 -- =====================================================
