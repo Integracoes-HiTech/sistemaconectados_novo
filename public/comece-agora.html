@@ -752,6 +752,18 @@
             border-color: #EF4444;
         }
 
+        .form-hint {
+            display: block;
+            margin-top: 0.25rem;
+            font-size: 0.75rem;
+            color: #64748B;
+            font-style: italic;
+        }
+
+        .form-input:focus + .form-hint {
+            color: var(--accent-orange);
+        }
+
         .validation-success {
             border-color: #10B981 !important;
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
@@ -1328,7 +1340,12 @@
             <form class="form-grid">
                 <div class="form-group">
                     <label class="form-label">Nome completo <span class="required">*</span></label>
-                    <input type="text" id="nomeCompleto" name="nomeCompleto" class="form-input" required>
+                    <input type="text" id="nomeCompleto" name="nomeCompleto" class="form-input" 
+                           placeholder="Ex: João Silva Santos" 
+                           pattern="[A-Za-zÀ-ÿ\s]{2,}" 
+                           title="Digite seu nome e sobrenome (mínimo 2 caracteres, apenas letras)"
+                           required>
+                    <small class="form-hint">Digite seu nome e sobrenome completo (apenas letras)</small>
                 </div>
 
                 <div class="form-group">
@@ -1358,7 +1375,11 @@
 
                 <div class="form-group full-width">
                     <label class="form-label">E-mail <span class="required">*</span></label>
-                    <input type="email" id="email" name="email" class="form-input" required>
+                    <input type="email" id="email" name="email" class="form-input" 
+                           placeholder="Ex: joao.silva@empresa.com.br" 
+                           title="Digite um email válido"
+                           required>
+                    <small class="form-hint">Digite um email válido para receber informações de acesso</small>
                 </div>
 
                 <div class="form-group">
@@ -1888,6 +1909,37 @@
             }
         }
 
+        // Função para validar nome completo
+        function validateFullName(name) {
+            const nameInput = document.getElementById('nomeCompleto');
+            
+            if (!name || name.trim().length < 2) {
+                nameInput.classList.remove('validation-success');
+                nameInput.classList.add('validation-error');
+                return false;
+            }
+            
+            // Verificar se tem pelo menos 2 palavras (nome e sobrenome)
+            const words = name.trim().split(/\s+/);
+            if (words.length < 2) {
+                nameInput.classList.remove('validation-success');
+                nameInput.classList.add('validation-error');
+                return false;
+            }
+            
+            // Verificar se contém apenas letras, espaços e acentos
+            const namePattern = /^[A-Za-zÀ-ÿ\s]+$/;
+            if (!namePattern.test(name)) {
+                nameInput.classList.remove('validation-success');
+                nameInput.classList.add('validation-error');
+                return false;
+            }
+            
+            nameInput.classList.remove('validation-error');
+            nameInput.classList.add('validation-success');
+            return true;
+        }
+
         // Função para validar telefone
         function validatePhone(phone) {
             const cleanPhone = phone.replace(/\D/g, '');
@@ -2295,6 +2347,12 @@
             if (!formData.nome_completo || !formData.cpf_cnpj || !formData.whatsapp || !formData.email) {
                 console.log('❌ Campos obrigatórios não preenchidos');
                 showValidationError('Por favor, preencha todos os campos obrigatórios.');
+                return;
+            }
+
+            // Validar nome completo (nome e sobrenome)
+            if (!validateFullName(formData.nome_completo)) {
+                showValidationError('Por favor, digite seu nome e sobrenome completo (apenas letras).');
                 return;
             }
 
@@ -2808,6 +2866,18 @@
                     if (cleanValue.length >= 10) {
                         validatePhone(this.value);
                     }
+                });
+            }
+
+            // Validação de nome completo
+            const nomeCompletoInput = document.getElementById('nomeCompleto');
+            if (nomeCompletoInput) {
+                nomeCompletoInput.addEventListener('input', function() {
+                    validateFullName(this.value);
+                });
+                
+                nomeCompletoInput.addEventListener('blur', function() {
+                    validateFullName(this.value);
                 });
             }
 
