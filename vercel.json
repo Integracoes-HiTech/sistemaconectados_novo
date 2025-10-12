@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/comece-agora",
-      "destination": "/landing.html"
+      "destination": "/comece-agora.html"
     },
     {
       "source": "/success",
-      "destination": "/sucesso.html"
+      "destination": "/success.html"
     },
     { 
       "source": "/(.*)", 

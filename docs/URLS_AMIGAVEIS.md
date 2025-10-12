@@ -4,18 +4,22 @@
 
 ### **Landing Page (Cadastro)**
 ```
-✅ URL Antiga: /landing.html
-✅ URL Nova: /comece-agora
+✅ Arquivo Antigo: landing.html
+✅ Arquivo Novo: comece-agora.html
+✅ URL: /comece-agora
 
 https://sistemaconectados-nov-odev.vercel.app/comece-agora
+https://conectadosdigital.com.br/comece-agora (após configurar)
 ```
 
 ### **Página de Sucesso**
 ```
-✅ URL Antiga: /sucesso.html
-✅ URL Nova: /success
+✅ Arquivo Antigo: sucesso.html
+✅ Arquivo Novo: success.html
+✅ URL: /success
 
 https://sistemaconectados-nov-odev.vercel.app/success
+https://conectadosdigital.com.br/success (após configurar)
 ```
 
 ---
@@ -29,11 +33,11 @@ https://sistemaconectados-nov-odev.vercel.app/success
   "rewrites": [
     {
       "source": "/comece-agora",
-      "destination": "/landing.html"
+      "destination": "/comece-agora.html"
     },
     {
       "source": "/success",
-      "destination": "/sucesso.html"
+      "destination": "/success.html"
     }
   ]
 }
