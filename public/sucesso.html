@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadastro Realizado - CONECTADOS</title>
+    <title>Pagamento Recebido - CONECTADOS</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
     <style>
         * {
             margin: 0;
@@ -11,31 +20,69 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary-blue: #14446C;
+            --secondary-blue: #0F3451;
+            --accent-orange: #CFBA7F;
+            --accent-gold: #CFBA7F;
+            --light-bg: #F8FAFC;
+            --white: #FFFFFF;
+            --text-dark: #1E293B;
+            --text-light: #64748B;
+            --gradient-primary: 
+                radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 40% 60%, rgba(255, 255, 255, 0.05) 0%, transparent 40%),
+                linear-gradient(135deg, #14446C 0%, #0F3451 50%, #14446C 100%);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--gradient-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 60%),
+                radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.02) 0%, transparent 60%),
+                radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.04) 0%, transparent 50%);
+            pointer-events: none;
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
+            background: var(--white);
+            border-radius: 24px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
+            max-width: 650px;
             width: 100%;
-            padding: 48px;
+            padding: 60px 48px;
             text-align: center;
-            animation: slideUp 0.5s ease-out;
+            animation: slideUp 0.6s ease-out;
+            position: relative;
+            z-index: 1;
         }
 
         @keyframes slideUp {
             from {
                 opacity: 0;
-                transform: translateY(30px);
+                transform: translateY(40px);
             }
             to {
                 opacity: 1;
@@ -43,229 +90,315 @@
             }
         }
 
-        .icon {
-            font-size: 80px;
-            margin-bottom: 24px;
-            animation: bounce 1s ease-in-out infinite;
+        .success-icon {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 32px;
+            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+            animation: scaleIn 0.5s ease-out 0.2s both;
         }
 
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateY(0);
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
             }
-            50% {
-                transform: translateY(-10px);
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .success-icon svg {
+            width: 60px;
+            height: 60px;
+            stroke: white;
+            stroke-width: 3;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            animation: checkmark 0.5s ease-out 0.5s both;
+        }
+
+        @keyframes checkmark {
+            0% {
+                stroke-dasharray: 0 100;
+            }
+            100% {
+                stroke-dasharray: 100 100;
             }
         }
 
         h1 {
-            color: #1a202c;
-            font-size: 32px;
-            font-weight: 700;
+            color: var(--text-dark);
+            font-size: 36px;
+            font-weight: 800;
             margin-bottom: 16px;
+            line-height: 1.2;
         }
 
         .subtitle {
-            color: #4a5568;
+            color: var(--text-light);
+            font-size: 20px;
+            margin-bottom: 16px;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+
+        .whatsapp-text {
+            color: var(--primary-blue);
             font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .whatsapp-icon {
+            width: 28px;
+            height: 28px;
+            fill: #25D366;
+        }
+
+        .info-card {
+            background: linear-gradient(135deg, var(--light-bg) 0%, #E0E7FF 100%);
+            border-left: 5px solid var(--primary-blue);
+            padding: 28px;
+            border-radius: 16px;
+            text-align: left;
             margin-bottom: 32px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .info-card h3 {
+            color: var(--primary-blue);
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-card p {
+            color: var(--text-dark);
+            font-size: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
             line-height: 1.6;
         }
 
-        .info-box {
-            background: #f7fafc;
-            border-left: 4px solid #667eea;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: left;
-            margin-bottom: 32px;
-        }
-
-        .info-box p {
-            color: #2d3748;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-
-        .info-box p:last-child {
+        .info-card p:last-child {
             margin-bottom: 0;
         }
 
-        .info-box strong {
-            color: #1a202c;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 18px 48px;
+        .info-card .icon {
+            min-width: 24px;
+            text-align: center;
             font-size: 18px;
-            font-weight: 600;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--text-light), transparent);
+            margin: 32px 0;
+            opacity: 0.3;
         }
 
-        .btn-primary:active {
-            transform: translateY(0);
-        }
-
-        .secondary-text {
-            color: #718096;
+        .footer-text {
+            color: var(--text-light);
             font-size: 14px;
-            margin-top: 24px;
+            line-height: 1.8;
         }
 
-        .loading {
-            display: none;
-            margin: 20px 0;
+        .footer-text strong {
+            color: var(--primary-blue);
+            font-weight: 600;
         }
 
-        .loading.active {
-            display: block;
+        .logo {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text-light);
+            margin-top: 32px;
+            letter-spacing: 2px;
         }
 
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+        /* Animação de partículas */
+        .particle {
+            position: absolute;
+            background: var(--accent-orange);
             border-radius: 50%;
+            opacity: 0.1;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .particle:nth-child(1) {
+            width: 60px;
+            height: 60px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .particle:nth-child(2) {
             width: 40px;
             height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
+            top: 60%;
+            right: 15%;
+            animation-delay: 1s;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .particle:nth-child(3) {
+            width: 80px;
+            height: 80px;
+            bottom: 15%;
+            left: 15%;
+            animation-delay: 2s;
         }
 
-        .error {
-            background: #fed7d7;
-            border-left: 4px solid #fc8181;
-            color: #742a2a;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            display: none;
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
         }
 
-        .error.active {
-            display: block;
+        @media (max-width: 640px) {
+            .container {
+                padding: 40px 24px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+
+            .subtitle {
+                font-size: 16px;
+            }
+
+            .whatsapp-text {
+                font-size: 16px;
+            }
+
+            .success-icon {
+                width: 100px;
+                height: 100px;
+            }
+
+            .success-icon svg {
+                width: 50px;
+                height: 50px;
+            }
+
+            .info-card {
+                padding: 20px;
+            }
+
+            .info-card h3 {
+                font-size: 16px;
+            }
+
+            .info-card p {
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Partículas decorativas -->
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+
     <div class="container">
-        <div class="icon">🎉</div>
-        <h1>Cadastro Realizado com Sucesso!</h1>
+        <!-- Ícone de Sucesso -->
+        <div class="success-icon">
+            <svg viewBox="0 0 52 52">
+                <path d="M14 27l7.5 7.5L38 18" />
+            </svg>
+        </div>
+
+        <!-- Título -->
+        <h1>Pagamento Recebido!</h1>
+        
+        <!-- Subtítulo -->
         <p class="subtitle">
-            Seu cadastro foi processado e estamos preparando seu link de pagamento.
+            Obrigado por escolher o CONECTADOS! 🎉
         </p>
 
-        <div class="error" id="errorBox">
-            <strong>⚠️ Erro:</strong> <span id="errorMessage"></span>
-        </div>
-
-        <div class="loading" id="loadingBox">
-            <div class="spinner"></div>
-            <p style="margin-top: 16px; color: #4a5568;">Gerando link de pagamento...</p>
-        </div>
-
-        <div class="info-box" id="infoBox" style="display: none;">
-            <p><strong>📋 Plano escolhido:</strong> <span id="planName"></span></p>
-            <p><strong>💰 Valor:</strong> <span id="planValue"></span></p>
-            <p><strong>📅 Vencimento:</strong> <span id="dueDate"></span></p>
-        </div>
-
-        <a href="#" class="btn-primary" id="paymentBtn" style="display: none;">
-            💳 Pagar Agora
-        </a>
-
-        <p class="secondary-text">
-            Ao clicar no botão acima, você será redirecionado para a página de pagamento segura.
+        <!-- Mensagem WhatsApp -->
+        <p class="whatsapp-text">
+            <svg class="whatsapp-icon" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+            </svg>
+            Em breve entraremos em contato pelo WhatsApp!
         </p>
+
+        <!-- Card de Informações -->
+        <div class="info-card">
+            <h3>
+                <span>📋</span>
+                Próximos Passos
+            </h3>
+            <p>
+                <span class="icon">✅</span>
+                <span>Nossa equipe receberá a confirmação do seu pagamento em instantes</span>
+            </p>
+            <p>
+                <span class="icon">💬</span>
+                <span><strong>Entraremos em contato pelo WhatsApp</strong> que você cadastrou para confirmar seus dados e ativar sua conta</span>
+            </p>
+            <p>
+                <span class="icon">🚀</span>
+                <span>Após a confirmação, você receberá suas credenciais de acesso ao sistema</span>
+            </p>
+            <p>
+                <span class="icon">🎯</span>
+                <span>Em até <strong>24 horas</strong> você estará pronto para começar a usar o CONECTADOS!</span>
+            </p>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider"></div>
+
+        <!-- Texto do rodapé -->
+        <p class="footer-text">
+            📧 Caso tenha alguma dúvida, você também pode entrar em contato conosco pelo email<br>
+            <strong>suporte@conectados.com</strong>
+        </p>
+
+        <p class="footer-text" style="margin-top: 24px;">
+            Agradecemos pela sua confiança! 💙
+        </p>
+
+        <!-- Logo -->
+        <div class="logo">CONECTADOS</div>
     </div>
 
     <script>
-        // Pegar parâmetros da URL
+        // Log para debug (opcional - pode remover em produção)
         const urlParams = new URLSearchParams(window.location.search);
-        const leadId = urlParams.get('lead_id');
-        const paymentUrl = urlParams.get('payment_url');
-        const paymentId = urlParams.get('payment_id');
-        const dueDate = urlParams.get('due_date');
-        const planName = urlParams.get('plan');
-        const amount = urlParams.get('amount');
+        console.log('✅ Página de sucesso carregada');
+        console.log('📋 Parâmetros:', Object.fromEntries(urlParams));
 
-        console.log('🔍 Parâmetros recebidos:', {
-            leadId,
-            paymentUrl,
-            paymentId,
-            dueDate,
-            planName,
-            amount
-        });
-
-        const loadingBox = document.getElementById('loadingBox');
-        const infoBox = document.getElementById('infoBox');
-        const paymentBtn = document.getElementById('paymentBtn');
-        const errorBox = document.getElementById('errorBox');
-        const errorMessage = document.getElementById('errorMessage');
-
-        // Verificar se tem payment_url
-        if (paymentUrl) {
-            console.log('✅ payment_url encontrado:', paymentUrl);
-            
-            // Esconder loading
-            loadingBox.classList.remove('active');
-            
-            // Mostrar informações
-            if (planName) document.getElementById('planName').textContent = planName;
-            if (amount) document.getElementById('planValue').textContent = `R$ ${parseFloat(amount).toFixed(2).replace('.', ',')}`;
-            if (dueDate) {
-                const date = new Date(dueDate);
-                document.getElementById('dueDate').textContent = date.toLocaleDateString('pt-BR');
-            }
-            
-            infoBox.style.display = 'block';
-            
-            // Configurar botão de pagamento
-            paymentBtn.href = paymentUrl;
-            paymentBtn.style.display = 'inline-block';
-            paymentBtn.onclick = function() {
-                console.log('🔗 Redirecionando para:', paymentUrl);
-            };
-            
-        } else if (leadId) {
-            console.log('⏳ payment_url não encontrado, mas temos lead_id:', leadId);
-            
-            // Mostrar loading
-            loadingBox.classList.add('active');
-            
-            // Tentar buscar do webhook (se disponível)
-            // Por enquanto, mostrar erro
+        // Adicionar animação extra ao ícone de check
+        setTimeout(() => {
+            const icon = document.querySelector('.success-icon');
+            icon.style.transform = 'scale(1.1)';
             setTimeout(() => {
-                loadingBox.classList.remove('active');
-                errorBox.classList.add('active');
-                errorMessage.textContent = 'Link de pagamento não foi gerado. Por favor, entre em contato com o suporte.';
-            }, 2000);
-            
-        } else {
-            console.log('❌ Nenhum parâmetro encontrado');
-            
-            loadingBox.classList.remove('active');
-            errorBox.classList.add('active');
-            errorMessage.textContent = 'Informações de pagamento não encontradas. Tente novamente ou entre em contato com o suporte.';
-        }
+                icon.style.transform = 'scale(1)';
+            }, 200);
+        }, 1000);
     </script>
 </body>
 </html>
