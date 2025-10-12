@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Botão Click</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔘 Teste Botão Click</h1>
+        
+        <form id="testForm">
+            <input type="text" id="nomeCompleto" value="João Silva Teste" placeholder="Nome Completo">
+            <input type="text" id="cpfCnpj" value="12345678901" placeholder="CPF/CNPJ">
+            <input type="text" id="whatsapp" value="5562999999999" placeholder="WhatsApp">
+            <input type="email" id="email" value="joao@teste.com" placeholder="Email">
+            <input type="text" id="cep" value="74000000" placeholder="CEP">
+            <input type="text" id="cidade" value="Goiânia" placeholder="Cidade">
+            <input type="text" id="bairro" value="Centro" placeholder="Bairro">
+            <input type="color" id="primaryColor" value="#14446C">
+            <input type="color" id="secondaryColor" value="#CFBA7F">
+            
+            <button type="submit" id="submitBtn">
+                <span id="submitText">Avançar para Pagamento</span>
+                <span id="submitLoading" style="display: none;">Processando...</span>
+            </button>
+        </form>
+
+        <div style="margin-top: 20px;">
+            <h3>📋 Log de Teste</h3>
+            <div id="testLog" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlan = 'profissional';
+        let testLog = [];
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            testLog.push(logMessage);
+            
+            const logElement = document.getElementById('testLog');
+            logElement.textContent = testLog.join('\n');
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(logMessage);
+        }
+
+        // Simular a função handleFormSubmit
+        async function handleFormSubmit(event) {
+            log('🚀 handleFormSubmit chamado!');
+            event.preventDefault();
+            
+            log('📋 Plano selecionado: ' + selectedPlan);
+            
+            if (!selectedPlan || selectedPlan === '') {
+                log('❌ Nenhum plano selecionado');
+                return;
+            }
+
+            const formData = {
+                nome_completo: document.getElementById('nomeCompleto').value,
+                cpf_cnpj: document.getElementById('cpfCnpj').value,
+                whatsapp: document.getElementById('whatsapp').value,
+                email: document.getElementById('email').value,
+                cep: document.getElementById('cep').value,
+                cidade: document.getElementById('cidade').value,
+                bairro: document.getElementById('bairro').value,
+                cor_principal: document.getElementById('primaryColor').value,
+                cor_secundaria: document.getElementById('secondaryColor').value,
+                plano_escolhido: selectedPlan
+            };
+
+            log('📝 Dados coletados:');
+            log(JSON.stringify(formData, null, 2));
+
+            // Simular validações
+            if (!formData.nome_completo || !formData.cpf_cnpj || !formData.whatsapp || !formData.email) {
+                log('❌ Campos obrigatórios não preenchidos');
+                return;
+            }
+
+            log('✅ Validações passaram, simulando processamento...');
+            
+            // Simular loading
+            const submitBtn = document.getElementById('submitBtn');
+            const submitText = document.getElementById('submitText');
+            const submitLoading = document.getElementById('submitLoading');
+            
+            submitBtn.disabled = true;
+            submitText.style.display = 'none';
+            submitLoading.style.display = 'inline';
+
+            // Simular processamento
+            setTimeout(() => {
+                log('✅ Processamento simulado concluído');
+                
+                // Restaurar botão
+                submitBtn.disabled = false;
+                submitText.style.display = 'inline';
+                submitLoading.style.display = 'none';
+            }, 2000);
+        }
+
+        // Configurar event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 DOM carregado, configurando event listeners...');
+            
+            const form = document.querySelector('form');
+            log('📋 Formulário encontrado: ' + (form ? 'SIM' : 'NÃO'));
+            
+            if (form) {
+                form.addEventListener('submit', handleFormSubmit);
+                log('✅ Event listener adicionado ao formulário');
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            log('🔘 Botão encontrado: ' + (submitBtn ? 'SIM' : 'NÃO'));
+            
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function(e) {
+                    log('🔘 Botão clicado diretamente!');
+                    e.preventDefault();
+                    handleFormSubmit(e);
+                });
+                log('✅ Event listener adicionado ao botão');
+            }
+            
+            // Teste manual
+            window.testForm = function() {
+                log('🧪 Teste manual iniciado...');
+                const fakeEvent = {
+                    preventDefault: function() { log('🔄 preventDefault chamado'); }
+                };
+                handleFormSubmit(fakeEvent);
+            };
+            
+            log('🧪 Função de teste disponível: window.testForm()');
+        });
+    </script>
+</body>
+</html>

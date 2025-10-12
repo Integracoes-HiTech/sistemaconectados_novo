@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro Realizado - CONECTADOS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 48px;
+            text-align: center;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: bounce 1s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        h1 {
+            color: #1a202c;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .subtitle {
+            color: #4a5568;
+            font-size: 18px;
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+
+        .info-box {
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: left;
+            margin-bottom: 32px;
+        }
+
+        .info-box p {
+            color: #2d3748;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .info-box p:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-box strong {
+            color: #1a202c;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px 48px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .secondary-text {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 24px;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fed7d7;
+            border-left: 4px solid #fc8181;
+            color: #742a2a;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .error.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🎉</div>
+        <h1>Cadastro Realizado com Sucesso!</h1>
+        <p class="subtitle">
+            Seu cadastro foi processado e estamos preparando seu link de pagamento.
+        </p>
+
+        <div class="error" id="errorBox">
+            <strong>⚠️ Erro:</strong> <span id="errorMessage"></span>
+        </div>
+
+        <div class="loading" id="loadingBox">
+            <div class="spinner"></div>
+            <p style="margin-top: 16px; color: #4a5568;">Gerando link de pagamento...</p>
+        </div>
+
+        <div class="info-box" id="infoBox" style="display: none;">
+            <p><strong>📋 Plano escolhido:</strong> <span id="planName"></span></p>
+            <p><strong>💰 Valor:</strong> <span id="planValue"></span></p>
+            <p><strong>📅 Vencimento:</strong> <span id="dueDate"></span></p>
+        </div>
+
+        <a href="#" class="btn-primary" id="paymentBtn" style="display: none;">
+            💳 Pagar Agora
+        </a>
+
+        <p class="secondary-text">
+            Ao clicar no botão acima, você será redirecionado para a página de pagamento segura.
+        </p>
+    </div>
+
+    <script>
+        // Pegar parâmetros da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const leadId = urlParams.get('lead_id');
+        const paymentUrl = urlParams.get('payment_url');
+        const paymentId = urlParams.get('payment_id');
+        const dueDate = urlParams.get('due_date');
+        const planName = urlParams.get('plan');
+        const amount = urlParams.get('amount');
+
+        console.log('🔍 Parâmetros recebidos:', {
+            leadId,
+            paymentUrl,
+            paymentId,
+            dueDate,
+            planName,
+            amount
+        });
+
+        const loadingBox = document.getElementById('loadingBox');
+        const infoBox = document.getElementById('infoBox');
+        const paymentBtn = document.getElementById('paymentBtn');
+        const errorBox = document.getElementById('errorBox');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Verificar se tem payment_url
+        if (paymentUrl) {
+            console.log('✅ payment_url encontrado:', paymentUrl);
+            
+            // Esconder loading
+            loadingBox.classList.remove('active');
+            
+            // Mostrar informações
+            if (planName) document.getElementById('planName').textContent = planName;
+            if (amount) document.getElementById('planValue').textContent = `R$ ${parseFloat(amount).toFixed(2).replace('.', ',')}`;
+            if (dueDate) {
+                const date = new Date(dueDate);
+                document.getElementById('dueDate').textContent = date.toLocaleDateString('pt-BR');
+            }
+            
+            infoBox.style.display = 'block';
+            
+            // Configurar botão de pagamento
+            paymentBtn.href = paymentUrl;
+            paymentBtn.style.display = 'inline-block';
+            paymentBtn.onclick = function() {
+                console.log('🔗 Redirecionando para:', paymentUrl);
+            };
+            
+        } else if (leadId) {
+            console.log('⏳ payment_url não encontrado, mas temos lead_id:', leadId);
+            
+            // Mostrar loading
+            loadingBox.classList.add('active');
+            
+            // Tentar buscar do webhook (se disponível)
+            // Por enquanto, mostrar erro
+            setTimeout(() => {
+                loadingBox.classList.remove('active');
+                errorBox.classList.add('active');
+                errorMessage.textContent = 'Link de pagamento não foi gerado. Por favor, entre em contato com o suporte.';
+            }, 2000);
+            
+        } else {
+            console.log('❌ Nenhum parâmetro encontrado');
+            
+            loadingBox.classList.remove('active');
+            errorBox.classList.add('active');
+            errorMessage.textContent = 'Informações de pagamento não encontradas. Tente novamente ou entre em contato com o suporte.';
+        }
+    </script>
+</body>
+</html>

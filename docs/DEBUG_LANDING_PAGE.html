@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Landing Page - Teste de Conexão</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .warning { background: #fff3cd; border-color: #ffeaa7; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Debug Landing Page - Teste de Conexão</h1>
+        
+        <div class="test-section">
+            <h3>📊 Informações da Conexão</h3>
+            <p><strong>Supabase URL:</strong> <span id="supabaseUrl"></span></p>
+            <p><strong>Status da Conexão:</strong> <span id="connectionStatus">Testando...</span></p>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Testes de Funcionalidade</h3>
+            <button onclick="testSupabaseConnection()">1. Testar Conexão Supabase</button>
+            <button onclick="testLeadInsert()">2. Testar Inserção de Lead</button>
+            <button onclick="testPaymentInsert()">3. Testar Inserção de Pagamento</button>
+            <button onclick="testValidation()">4. Testar Validações</button>
+            <button onclick="clearLog()">🗑️ Limpar Log</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 Log de Debug</h3>
+            <div id="debugLog" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 Diagnóstico de Problemas</h3>
+            <div id="diagnosis"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configurações do Supabase
+        const SUPABASE_URL = 'https://zveysullpsdopcwsncai.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y';
+        
+        let debugLog = [];
+
+        // Inicializar página
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('supabaseUrl').textContent = SUPABASE_URL;
+            log('🚀 Página de debug carregada');
+            log('📡 URL do Supabase: ' + SUPABASE_URL);
+            testSupabaseConnection();
+        });
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            debugLog.push(logMessage);
+            
+            const logElement = document.getElementById('debugLog');
+            logElement.textContent = debugLog.join('\n');
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(logMessage);
+        }
+
+        function clearLog() {
+            debugLog = [];
+            document.getElementById('debugLog').textContent = '';
+        }
+
+        async function testSupabaseConnection() {
+            log('🔍 Testando conexão com Supabase...');
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+                    method: 'GET',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    }
+                });
+
+                if (response.ok) {
+                    log('✅ Conexão com Supabase OK');
+                    document.getElementById('connectionStatus').textContent = '✅ Conectado';
+                    document.getElementById('connectionStatus').style.color = 'green';
+                    return true;
+                } else {
+                    log(`❌ Erro na conexão: ${response.status} ${response.statusText}`);
+                    document.getElementById('connectionStatus').textContent = '❌ Erro de Conexão';
+                    document.getElementById('connectionStatus').style.color = 'red';
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Erro de rede: ${error.message}`);
+                document.getElementById('connectionStatus').textContent = '❌ Erro de Rede';
+                document.getElementById('connectionStatus').style.color = 'red';
+                return false;
+            }
+        }
+
+        async function testLeadInsert() {
+            log('🧪 Testando inserção de lead...');
+            
+            const testData = {
+                nome_completo: 'Teste Debug',
+                cpf_cnpj: '12345678901',
+                whatsapp: '5562999999999',
+                email: 'teste@debug.com',
+                plano_escolhido: 'gratuito',
+                status: 'pendente'
+            };
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/landing_leads`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Lead inserido com sucesso! ID: ${data[0].id}`);
+                    return data[0].id;
+                } else {
+                    const errorData = await response.json();
+                    log(`❌ Erro ao inserir lead: ${response.status} - ${JSON.stringify(errorData)}`);
+                    return null;
+                }
+            } catch (error) {
+                log(`❌ Erro de rede ao inserir lead: ${error.message}`);
+                return null;
+            }
+        }
+
+        async function testPaymentInsert() {
+            log('🧪 Testando inserção de pagamento...');
+            
+            // Primeiro inserir um lead
+            const leadId = await testLeadInsert();
+            if (!leadId) {
+                log('❌ Não foi possível inserir lead para teste de pagamento');
+                return;
+            }
+
+            const testPaymentData = {
+                lead_id: leadId,
+                payment_gateway: 'asaas',
+                amount: 100.00,
+                currency: 'BRL',
+                status: 'pending',
+                payment_method: 'PIX'
+            };
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/landing_payments`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(testPaymentData)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Pagamento inserido com sucesso! ID: ${data[0].id}`);
+                } else {
+                    const errorData = await response.json();
+                    log(`❌ Erro ao inserir pagamento: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+            } catch (error) {
+                log(`❌ Erro de rede ao inserir pagamento: ${error.message}`);
+            }
+        }
+
+        async function testValidation() {
+            log('🧪 Testando validações...');
+            
+            // Testar validação de CPF
+            const testCPF = '12345678901';
+            const cpfValid = validateCPF(testCPF);
+            log(`📋 CPF ${testCPF}: ${cpfValid ? '✅ Válido' : '❌ Inválido'}`);
+            
+            // Testar validação de telefone
+            const testPhone = '5562999999999';
+            const phoneValid = validatePhone(testPhone);
+            log(`📞 Telefone ${testPhone}: ${phoneValid ? '✅ Válido' : '❌ Inválido'}`);
+        }
+
+        // Funções de validação (copiadas da landing page)
+        function validateCPF(cpf) {
+            cpf = cpf.replace(/\D/g, '');
+            if (cpf.length !== 11) return false;
+            
+            // Verificar se todos os dígitos são iguais
+            if (/^(\d)\1{10}$/.test(cpf)) return false;
+            
+            // Validar primeiro dígito
+            let sum = 0;
+            for (let i = 0; i < 9; i++) {
+                sum += parseInt(cpf.charAt(i)) * (10 - i);
+            }
+            let remainder = (sum * 10) % 11;
+            if (remainder === 10 || remainder === 11) remainder = 0;
+            if (remainder !== parseInt(cpf.charAt(9))) return false;
+            
+            // Validar segundo dígito
+            sum = 0;
+            for (let i = 0; i < 10; i++) {
+                sum += parseInt(cpf.charAt(i)) * (11 - i);
+            }
+            remainder = (sum * 10) % 11;
+            if (remainder === 10 || remainder === 11) remainder = 0;
+            if (remainder !== parseInt(cpf.charAt(10))) return false;
+            
+            return true;
+        }
+
+        function validatePhone(phone) {
+            phone = phone.replace(/\D/g, '');
+            if (phone.length < 10 || phone.length > 11) return false;
+            
+            // Verificar se é um número repetido
+            if (/^(\d)\1{9,10}$/.test(phone)) return false;
+            
+            return true;
+        }
+    </script>
+</body>
+</html>
