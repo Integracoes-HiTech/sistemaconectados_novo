@@ -10,6 +10,8 @@ import Dashboard from "./pages/dashboard";
 import PublicRegister from "./pages/PublicRegister";
 import PublicRegisterSaude from "./pages/PublicRegisterSaude";
 import PublicRegisterCampanha from "./pages/PublicRegisterCampanha";
+import PublicRegisterAdmin from "./pages/PublicRegisterAdmin";
+import PublicRegisterPlano from "./pages/PublicRegisterPlano";
 import Settings from "./pages/Settings";
 import PaidContracts from "./pages/PaidContracts";
 import NotFound from "./pages/NotFound";
@@ -53,6 +55,8 @@ const App = () => (
             <Route path="/cadastro/:linkId" element={<PublicRegister />} />
             <Route path="/cadastro-saude" element={<PublicRegisterSaude />} />
             <Route path="/cadastro-campanha" element={<PublicRegisterCampanha />} />
+            <Route path="/cadastro-admin" element={<PublicRegisterAdmin />} />
+            <Route path="/cadastro-plano" element={<PublicRegisterPlano />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>

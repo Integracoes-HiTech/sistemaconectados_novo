@@ -33,13 +33,16 @@ import {
   Tag,
   XCircle,
   CheckCircle,
-  FileText
+  FileText,
+  Package,
+  DollarSign
 } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useStats } from "@/hooks/useStats";
 import { useAuth } from "@/hooks/useAuth";
 import { useReports } from "@/hooks/useReports";
 import { useUserLinks } from "@/hooks/useUserLinks";
+import { usePlanos } from "@/hooks/usePlanos";
 import { useMembers } from "@/hooks/useMembers";
 import type { Member } from "@/hooks/useMembers";
 import { useFriendsRanking } from "@/hooks/useFriendsRanking";
@@ -151,7 +154,7 @@ export default function Dashboard() {
       try {
         const { data, error } = await supabase
           .from('campaigns')
-          .select('background_color, primary_color, secondary_color')
+          .select('primary_color, secondary_color')
           .eq('code', user.campaign)
           .single();
         
@@ -161,7 +164,7 @@ export default function Dashboard() {
 
         if (data) {
           setCampaignColors({
-            background: data.background_color,
+            background: data.primary_color,
             primary: data.primary_color,
             secondary: data.secondary_color
           });
@@ -238,6 +241,10 @@ export default function Dashboard() {
           title: "Membro excluído",
           description: `O membro "${memberName}" foi excluído com sucesso.`,
         });
+        
+        // Refresh automático dos relatórios e estatísticas
+        await fetchStats();
+        await fetchReportData();
       } else {
         throw new Error(result.error || 'Erro desconhecido');
       }
@@ -275,6 +282,10 @@ export default function Dashboard() {
           title: "✅ Amigo excluído",
           description: `O amigo "${friendName}" foi excluído com sucesso.`,
         });
+        
+        // Refresh automático dos relatórios e estatísticas
+        await fetchStats();
+        await fetchReportData();
       } else {
         throw new Error(result.error || "Erro desconhecido");
       }
@@ -313,6 +324,10 @@ export default function Dashboard() {
           title: "✅ Pessoa excluída",
           description: `"${personName}" foi excluído(a) com sucesso.`,
         });
+        
+        // Refresh automático dos relatórios e estatísticas
+        await fetchStats();
+        await fetchReportData();
       } else {
         throw new Error("Erro ao excluir pessoa");
       }
@@ -427,7 +442,10 @@ export default function Dashboard() {
     }
 
     try {
+      console.log('🔄 Iniciando toggle da campanha:', campaign.code, 'Status atual:', campaign.is_active);
+      
       const result = await toggleCampaignStatus(campaign.code, campaign.is_active);
+      console.log('📊 Resultado do toggle da campanha:', result);
       
       if (result.success) {
         toast({
@@ -436,7 +454,12 @@ export default function Dashboard() {
             ? `A campanha "${campaign.name}" e todos seus usuários foram desativados.`
             : `A campanha "${campaign.name}" e todos seus usuários foram reativados.`,
         });
+        
+        // Refresh automático dos dados
+        await fetchCampaigns();
+        await fetchAdmins(); // Atualizar administradores também
       } else {
+        console.error('❌ Erro no toggle da campanha:', result.error);
         toast({
           title: "Erro ao alterar status",
           description: result.error || "Tente novamente.",
@@ -444,6 +467,7 @@ export default function Dashboard() {
         });
       }
     } catch (error) {
+      console.error('💥 Erro geral no toggle da campanha:', error);
       toast({
         title: "Erro ao alterar status",
         description: "Ocorreu um erro inesperado.",
@@ -536,17 +560,26 @@ export default function Dashboard() {
     }
 
     try {
+      console.log('🔄 Iniciando toggle do admin:', adminId, 'Status atual:', currentStatus);
+      
       const result = await toggleAdminStatus(adminId, currentStatus);
+      console.log('📊 Resultado do toggle do admin:', result);
       
       if (result.success) {
         toast({
           title: "✅ Status atualizado",
           description: `O admin "${adminUsername}" foi ${!currentStatus ? 'ativado' : 'desativado'} com sucesso.`,
         });
+        
+        // Refresh automático dos dados
+        await fetchAdmins();
+        await fetchCampaigns(); // Atualizar campanhas também
       } else {
+        console.error('❌ Erro no toggle do admin:', result.error);
         throw new Error(result.error || "Erro ao atualizar status");
       }
     } catch (error) {
+      console.error('💥 Erro geral no toggle do admin:', error);
       toast({
         title: "❌ Erro ao atualizar",
         description: error instanceof Error ? error.message : "Erro ao atualizar status",
@@ -567,8 +600,8 @@ export default function Dashboard() {
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
   const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter, user?.campaign);
-  const { stats, loading: statsLoading } = useStats(referrerFilter, user?.campaign);
-  const { reportData, loading: reportsLoading } = useReports(referrerFilter, user?.campaign);
+  const { stats, loading: statsLoading, fetchStats } = useStats(referrerFilter, user?.campaign);
+  const { reportData, loading: reportsLoading, fetchReportData } = useReports(referrerFilter, user?.campaign);
   const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter, user?.campaign);
   
   // Novos hooks para o sistema de membros
@@ -628,19 +661,28 @@ export default function Dashboard() {
   } = useSaudePeople();
 
   // Hooks para AdminHitech - Campanhas e Admins
-  const { 
-    campaigns, 
+  const {
+    campaigns,
     loading: campaignsLoading,
     deleteCampaign,
-    toggleCampaignStatus
+    toggleCampaignStatus,
+    fetchCampaigns
   } = useCampaigns();
 
   const {
     admins,
     loading: adminsLoading,
     deleteAdmin,
-    toggleAdminStatus
+    toggleAdminStatus,
+    fetchAdmins
   } = useAdmins();
+
+  const {
+    planos,
+    loading: planosLoading,
+    togglePlanoStatus,
+    fetchPlanos
+  } = usePlanos();
 
   // Verificar o que está sendo passado para os hooks
   // Verificar dados carregados
@@ -886,7 +928,7 @@ export default function Dashboard() {
               <Button
                 onClick={handleLogout}
                 variant="outline"
-                className={`${user?.campaign === 'B' ? 'border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10' : 'border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10'}`}
+                className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
               >
                 Sair
               </Button>
@@ -929,17 +971,6 @@ export default function Dashboard() {
             </p>
           </div>
           
-            {isAdminHitech() && (
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={() => navigate('/cadastro-campanha')}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium"
-            >
-              <Tag className="w-4 h-4 mr-2" />
-              Cadastrar Nova Campanha
-            </Button>
-          </div>
-            )}
 
             {isAdmin3() && (
           <div className="flex flex-col sm:flex-row gap-3">
@@ -1081,11 +1112,11 @@ export default function Dashboard() {
               <div className="space-y-6">
                 {/* Informação sobre Configurações */}
                 <div className={`p-4 rounded-lg border ${user?.campaign === 'B' ? 'bg-blue-50 border-blue-200' : 'bg-blue-50 border-blue-200'}`}>
-                  <h4 className={`font-semibold mb-3 flex items-center gap-2 ${user?.campaign === 'B' ? 'text-blue-800' : 'text-blue-800'}`}>
-                    <Settings className="w-4 h-4" />
+                  <h4 className="font-semibold mb-3 flex items-center gap-2" style={{ color: '#14446C' }}>
+                    <Settings className="w-4 h-4" style={{ color: '#14446C' }} />
                     Configurações do Sistema
                   </h4>
-                  <p className={`text-sm mb-3 ${user?.campaign === 'B' ? 'text-blue-700' : 'text-blue-700'}`}>
+                  <p className="text-sm mb-3" style={{ color: '#14446C' }}>
                     Tipo de links atual: <strong>
                       {settings?.member_links_type === 'members' 
                         ? 'Novos Membros (duplas)'
@@ -1096,9 +1127,8 @@ export default function Dashboard() {
                   <Button
                     size="sm"
                     onClick={() => navigate('/settings')}
-                    className={`${user?.campaign === 'B' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                    className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
                   >
-                    <Settings className="w-4 h-4 mr-2" />
                     Gerenciar Configurações
                   </Button>
                 </div>
@@ -2678,13 +2708,23 @@ export default function Dashboard() {
         {isAdminHitech() && (
           <Card className="shadow-[var(--shadow-card)] mt-8">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                <Tag className="w-5 h-5" />
-                Campanhas Cadastradas
-              </CardTitle>
-              <CardDescription>
-                Lista de todas as campanhas do sistema
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                    <Tag className="w-5 h-5" />
+                    Campanhas Cadastradas
+                  </CardTitle>
+                  <CardDescription>
+                    Lista de todas as campanhas do sistema
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => navigate('/cadastro-campanha')}
+                  className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
+                >
+                  Nova Campanha
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {campaignsLoading ? (
@@ -2697,11 +2737,9 @@ export default function Dashboard() {
                     <thead>
                       <tr className="border-b border-institutional-light">
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Código</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Primária</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Plano</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor principal</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Secundária</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor Accent</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cor de Fundo</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
@@ -2728,9 +2766,15 @@ export default function Dashboard() {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
-                              {campaign.code}
-                            </span>
+                            {campaign.nome_plano ? (
+                              <div className="flex flex-col">
+                                <span className="font-medium text-institutional-blue">
+                                  {campaign.nome_plano}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">Sem plano</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
@@ -2748,24 +2792,6 @@ export default function Dashboard() {
                                 style={{ backgroundColor: campaign.secondary_color }}
                               />
                               <span className="text-xs text-gray-600">{campaign.secondary_color}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-6 h-6 rounded border border-gray-300"
-                                style={{ backgroundColor: campaign.accent_color }}
-                              />
-                              <span className="text-xs text-gray-600">{campaign.accent_color}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-6 h-6 rounded border border-gray-300"
-                                style={{ backgroundColor: campaign.background_color }}
-                              />
-                              <span className="text-xs text-gray-600">{campaign.background_color}</span>
                             </div>
                           </td>
                           <td className="py-3 px-4">
@@ -2790,30 +2816,19 @@ export default function Dashboard() {
                                 onClick={() => handleToggleCampaignStatus(campaign)}
                                 className={`border ${
                                   campaign.is_active 
-                                    ? 'border-red-500 text-red-600 hover:bg-red-50' 
-                                    : 'border-green-500 text-green-600 hover:bg-green-50'
+                                    ? 'border-red-500 text-white hover:bg-red-600 bg-red-500' 
+                                    : 'border-green-500 text-white hover:bg-green-600 bg-green-500'
                                 }`}
                               >
-                                {campaign.is_active ? (
-                                  <>
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Desativar
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle className="w-4 h-4 mr-1" />
-                                    Ativar
-                                  </>
-                                )}
+                                {campaign.is_active ? 'Desativar' : 'Ativar'}
                               </Button>
                               {campaign.is_active && (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleEditCampaign(campaign)}
-                                  className="border-institutional-gold text-institutional-blue hover:bg-institutional-light"
+                                  className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
                                 >
-                                  <Settings className="w-4 h-4 mr-1" />
                                   Editar
                                 </Button>
                               )}
@@ -2839,14 +2854,23 @@ export default function Dashboard() {
         {/* Tabela de Admins - AdminHitech */}
         {isAdminHitech() && (
           <Card className="shadow-[var(--shadow-card)] mt-8">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                <UserCheck className="w-5 h-5" />
-                Administradores do Sistema
-              </CardTitle>
-              <CardDescription>
-                Lista de todos os administradores cadastrados
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                  <UserCheck className="w-5 h-5" />
+                  Administradores do Sistema
+                </CardTitle>
+                <CardDescription>
+                  Lista de todos os administradores cadastrados
+                </CardDescription>
+              </div>
+              <Button
+                onClick={() => navigate('/cadastro-admin')}
+                className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium"
+              >
+                <UserCheck className="w-4 h-4 mr-2" />
+                Novo Administrador
+              </Button>
             </CardHeader>
             <CardContent>
               {adminsLoading ? (
@@ -2858,69 +2882,75 @@ export default function Dashboard() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b border-institutional-light">
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Username</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
-                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome Completo</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Campanha</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {admins.map((admin) => (
-                        <tr 
-                          key={admin.id} 
-                          className={`border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors ${
-                            !admin.is_active || admin.deleted_at ? 'opacity-50 bg-gray-50' : ''
-                          }`}
-                        >
-                          <td className="py-3 px-4">
-                            <span className={`font-medium text-institutional-blue ${
-                              !admin.is_active || admin.deleted_at ? 'line-through text-gray-400' : ''
-                            }`}>
-                              @{admin.username}
-                            </span>
-                            {(!admin.is_active || admin.deleted_at) && (
-                              <span className="ml-2 text-xs text-red-500 font-semibold">
-                                (DESATIVADO)
+                      {admins.map((admin) => {
+                        // Buscar nome da campanha
+                        const campanha = campaigns.find(c => c.code === admin.campaign);
+                        const campanhaName = campanha?.name || admin.campaign;
+                        
+                        return (
+                          <tr 
+                            key={admin.id} 
+                            className={`border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors ${
+                              !admin.is_active || admin.deleted_at ? 'opacity-50 bg-gray-50' : ''
+                            }`}
+                          >
+                            <td className="py-3 px-4">
+                              <span className={`font-medium text-institutional-blue ${
+                                !admin.is_active || admin.deleted_at ? 'line-through text-gray-400' : ''
+                              }`}>
+                                {admin.name}
                               </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`text-sm ${
-                              !admin.is_active || admin.deleted_at ? 'line-through text-gray-400' : ''
-                            }`}>
-                              {admin.name}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`text-sm text-gray-600 ${
-                              !admin.is_active || admin.deleted_at ? 'line-through' : ''
-                            }`}>
-                              {admin.full_name}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
-                              {admin.campaign}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              admin.is_active 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {admin.is_active ? 'Ativo' : 'Inativo'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="text-sm text-gray-600">
-                              {new Date(admin.created_at).toLocaleDateString('pt-BR')}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                              {(!admin.is_active || admin.deleted_at) && (
+                                <span className="ml-2 text-xs text-red-500 font-semibold">
+                                  (DESATIVADO)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
+                                {campanhaName}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                admin.is_active 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {admin.is_active ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-sm text-gray-600">
+                                {new Date(admin.created_at).toLocaleDateString('pt-BR')}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {admin.is_active && (
+                                <Button
+                                  onClick={() => navigate('/cadastro-admin', { 
+                                    state: { 
+                                      editMode: true, 
+                                      adminData: admin 
+                                    } 
+                                  })}
+                                  className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
+                                >
+                                  Editar
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   
@@ -2928,6 +2958,162 @@ export default function Dashboard() {
                     <div className="text-center py-8 text-muted-foreground">
                       <UserCheck className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
                       <p>Nenhum administrador cadastrado ainda.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tabela de Planos - AdminHitech */}
+        {isAdminHitech() && (
+          <Card className="shadow-[var(--shadow-card)] mt-8">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                  <Package className="w-5 h-5" />
+                  Planos e Preços
+                </CardTitle>
+                <CardDescription>
+                  Gerencie os planos disponíveis no sistema
+                </CardDescription>
+              </div>
+              <Button
+                onClick={() => navigate('/cadastro-plano')}
+                className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium"
+              >
+                <Package className="w-4 h-4 mr-2" />
+                Novo Plano
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {planosLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Carregando planos...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-institutional-light">
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Valor</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Recorrência</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Máx. Usuários</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {planos.map((plano) => (
+                        <tr 
+                          key={plano.id} 
+                          className={`border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors ${
+                            !plano.is_active ? 'opacity-50 bg-gray-50' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col">
+                              <span className={`font-medium text-institutional-blue ${
+                                !plano.is_active ? 'line-through text-gray-400' : ''
+                              }`}>
+                                {plano.nome_plano}
+                              </span>
+                              {plano.descricao && (
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {plano.descricao}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1">
+                              <DollarSign className="w-4 h-4 text-green-600" />
+                              <span className="font-semibold text-green-600">
+                                R$ {plano.amount.toFixed(2).replace('.', ',')}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">
+                              {plano.recorrencia === 'MONTHLY' ? 'Mensal' : 
+                               plano.recorrencia === 'QUARTERLY' ? 'Trimestral' :
+                               plano.recorrencia === 'SEMIANNUAL' ? 'Semestral' :
+                               plano.recorrencia === 'YEARLY' ? 'Anual' : plano.recorrencia}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-sm text-gray-600">
+                              {plano.max_users === 999999 ? 'Ilimitado' : plano.max_users?.toLocaleString('pt-BR') || '-'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  console.log('🔄 Iniciando toggle do plano:', plano.id, 'Status atual:', plano.is_active);
+                                  
+                                  const result = await togglePlanoStatus(plano.id, plano.is_active);
+                                  console.log('📊 Resultado do toggle:', result);
+                                  
+                                  if (result.success) {
+                                    toast({
+                                      title: result.newStatus ? "Plano ativado" : "Plano desativado",
+                                      description: `O plano "${plano.nome_plano}" foi ${result.newStatus ? 'ativado' : 'desativado'} com sucesso.`,
+                                    });
+                                    
+                                    // Refresh automático dos dados
+                                    await fetchPlanos();
+                                    await fetchCampaigns(); // Atualizar campanhas também
+                                  } else {
+                                    console.error('❌ Erro no toggle:', result.error);
+                                    toast({
+                                      title: "Erro ao alterar status",
+                                      description: result.error || "Não foi possível alterar o status do plano.",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } catch (error) {
+                                  console.error('💥 Erro geral no toggle:', error);
+                                  toast({
+                                    title: "Erro ao alterar status",
+                                    description: "Ocorreu um erro inesperado.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                                plano.is_active 
+                                  ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                                  : 'bg-red-100 text-red-800 hover:bg-red-200'
+                              }`}
+                            >
+                              {plano.is_active ? 'Ativo' : 'Inativo'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Button
+                              onClick={() => navigate('/cadastro-plano', { 
+                                state: { 
+                                  editMode: true, 
+                                  planoData: plano 
+                                } 
+                              })}
+                              className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
+                            >
+                              Editar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {planos.length === 0 && (
+                    <div className="text-center py-12">
+                      <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                      <p>Nenhum plano cadastrado ainda.</p>
                     </div>
                   )}
                 </div>

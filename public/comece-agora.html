@@ -7,10 +7,11 @@
     <meta name="description" content="Centralize seus cadastros e gerencie sua rede com eficiência e segurança. Sistema inteligente para organizar informações, visualizar dados no mapa e gerenciar equipes.">
     
     <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/lovable-uploads/logo.png?v=2">
-    <link rel="icon" type="image/png" sizes="16x16" href="/lovable-uploads/logo.png?v=2">
-    <link rel="shortcut icon" href="/lovable-uploads/logo.png?v=2">
-    <link rel="apple-touch-icon" href="/lovable-uploads/logo.png?v=2">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/lovable-uploads/logo.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="/lovable-uploads/logo.png?v=3">
+    <link rel="shortcut icon" href="/favicon.svg">
+    <link rel="apple-touch-icon" href="/lovable-uploads/logo.png?v=3">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1165,7 +1166,7 @@
                     O CONECTADOS é um sistema inteligente para quem precisa organizar informações, visualizar dados no mapa e gerenciar equipes em um só lugar.
                 </p>
                 <div class="hero-ctas">
-                    <a href="#planos" class="btn-primary">Experimentar Gratuitamente</a>
+                    <a href="#contato" class="btn-primary" onclick="selectFreePlan(event)">Experimentar Gratuitamente</a>
                     <a href="#planos" class="btn-secondary">Ver Planos e Preços</a>
                 </div>
                 <div class="hero-features">
@@ -1357,9 +1358,7 @@
                     <span class="benefit-text">Suporte especializado via WhatsApp</span>
                 </div>
             </div>
-            <div class="benefits-cta">
-                <a href="#planos" class="btn-primary">Testar gratuitamente agora</a>
-            </div>
+          
         </div>
     </section>
 
@@ -1611,7 +1610,18 @@
                     throw new Error(`Erro ao carregar planos: ${response.status}`);
                 }
 
-                planosDisponiveis = await response.json();
+                try {
+                    planosDisponiveis = await response.json();
+                } catch (parseError) {
+                    console.error('Erro ao processar resposta dos planos:', parseError);
+                    planosDisponiveis = [];
+                }
+                
+                // Filtrar planos: remover "Valter" e "Saude"
+                planosDisponiveis = planosDisponiveis.filter(plano => {
+                    const nomePlano = plano.nome_plano.toLowerCase();
+                    return nomePlano !== 'valter' && nomePlano !== 'saude';
+                });
                 
                 // Renderizar cards de planos
                 renderizarPlanos(planosDisponiveis);
@@ -1740,13 +1750,21 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Erro ao salvar lead');
+                    try {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Erro ao salvar lead');
+                    } catch (parseError) {
+                        throw new Error('Erro de conexão. Tente novamente em alguns instantes.');
+                    }
                 }
 
                 const data = await response.json();
                 return { success: true, leadId: data[0].id, data: data[0] };
             } catch (error) {
+                // Tratar erros de parsing JSON
+                if (error.message.includes('Unexpected end of JSON input') || error.message.includes('Failed to execute')) {
+                    return { success: false, error: 'Erro de conexão com o servidor. Tente novamente em alguns instantes.' };
+                }
                 return { success: false, error: error.message };
             }
         }
@@ -1767,13 +1785,21 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Erro ao salvar pagamento');
+                    try {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Erro ao salvar pagamento');
+                    } catch (parseError) {
+                        throw new Error('Erro de conexão. Tente novamente em alguns instantes.');
+                    }
                 }
 
                 const data = await response.json();
                 return { success: true, paymentId: data[0].id, data: data[0] };
             } catch (error) {
+                // Tratar erros de parsing JSON
+                if (error.message.includes('Unexpected end of JSON input') || error.message.includes('Failed to execute')) {
+                    return { success: false, error: 'Erro de conexão com o servidor. Tente novamente em alguns instantes.' };
+                }
                 return { success: false, error: error.message };
             }
         }
@@ -1822,9 +1848,20 @@
                 
                 return result;
             } catch (error) {
+                // Tratar erros de parsing JSON
+                if (error.message.includes('Unexpected end of JSON input') || error.message.includes('Failed to execute')) {
+                    return {
+                        success: false,
+                        error: 'Erro de conexão com o servidor de pagamento. Tente novamente em alguns instantes.'
+                    };
+                }
                 
                 // Diagnóstico do erro
                 if (error.message === 'Failed to fetch') {
+                    return {
+                        success: false,
+                        error: 'Erro de conexão. Verifique sua internet e tente novamente.'
+                    };
                 }
                 
                 return {
@@ -1861,9 +1898,9 @@
                 }
             }
             
-            // Scroll suave para o formulário
+            // Scroll suave para o formulário (seção #contato)
             setTimeout(() => {
-                const formSection = document.querySelector('.signup-section');
+                const formSection = document.querySelector('#contato');
                 if (formSection) {
                     formSection.scrollIntoView({ 
                         behavior: 'smooth', 
@@ -2003,6 +2040,18 @@
                 phoneInput.classList.add('validation-success');
             }
             return true;
+        }
+
+        // Função para validar email
+        function validateEmail(email) {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            return emailRegex.test(email);
+        }
+
+        // Função para validar formato do CEP
+        function validateCEPFormat(cep) {
+            const cleanCep = cep.replace(/\D/g, '');
+            return cleanCep.length === 8;
         }
 
         // Função para aplicar máscara de CPF
@@ -2162,40 +2211,101 @@
             
             const planDetails = getPlanDetails(selectedPlanId);  // Usa ID do banco
             
-            if (planDetails.price === 0) {
-                // Plano gratuito - criar acesso direto
-                return await createFreeAccess(leadData);
+            // Todos os planos (incluindo gratuito) passam pelo ASAAS
+            // Plano gratuito: valor 0, confirmação automática
+            // Plano pago: valor > 0, requer pagamento
+            return await createPaidPayment(leadData, planDetails);
+        }
+
+        // Função para selecionar plano gratuito automaticamente
+        function selectFreePlan(event) {
+            event.preventDefault();
+            
+            // Buscar plano gratuito nos planos disponíveis
+            const planoGratuito = planosDisponiveis.find(plano => plano.amount === 0);
+            
+            if (planoGratuito) {
+                // Encontrar o card do plano gratuito
+                const planoCards = document.querySelectorAll('.pricing-card');
+                let cardElement = null;
+                
+                for (let card of planoCards) {
+                    const cardId = card.getAttribute('data-plan-id');
+                    if (cardId === planoGratuito.id.toString()) {
+                        cardElement = card.querySelector('button');
+                        break;
+                    }
+                }
+                
+                // Selecionar o plano gratuito com o elemento do card
+                selectPlan(planoGratuito.id, planoGratuito.nome_plano, cardElement);
+                
+                // Scroll suave para o formulário
+                setTimeout(() => {
+                    const formSection = document.querySelector('#contato');
+                    if (formSection) {
+                        formSection.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'start' 
+                        });
+                    }
+                }, 100);
             } else {
-                // Plano pago - processar pagamento
-                return await createPaidPayment(leadData, planDetails);
+                // Se não encontrar plano gratuito, apenas fazer scroll
+                const formSection = document.querySelector('#contato');
+                if (formSection) {
+                    formSection.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start' 
+                    });
+                }
             }
         }
 
-        // Função para criar acesso gratuito
-        async function createFreeAccess(leadData) {
+        // Função para verificar se o webhook está acessível
+        async function checkWebhookAccess() {
             try {
-                // Salvar lead no banco
-                const saveResult = await saveLeadToDatabase(leadData);
+                // Fazer uma requisição HEAD para verificar se o webhook responde
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'HEAD',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
                 
-                if (!saveResult.success) {
-                    throw new Error(saveResult.error || 'Erro ao salvar lead');
-                }
+                // Se chegou até aqui, o webhook está acessível
+                return { success: true };
                 
-                leadId = saveResult.leadId;
-                
-                // Plano gratuito - não precisa processar pagamento
-                
-                return { success: true, isFree: true, leadId: leadId };
             } catch (error) {
-                return { success: false, error: error.message };
+                // Webhook não acessível (CORS, offline, etc.)
+                return { 
+                    success: false, 
+                    error: 'Webhook não acessível: ' + error.message 
+                };
             }
         }
+
+        // Função removida: createFreeAccess
+        // Agora todos os planos (incluindo gratuito) passam pelo ASAAS
 
         // Função para criar pagamento pago
         async function createPaidPayment(leadData, planDetails) {
             
             try {
-                // 1. Salvar lead no banco PRIMEIRO para pegar o ID
+                // 1. PRIMEIRO: Verificar se o webhook está acessível
+                const webhookCheck = await checkWebhookAccess();
+                
+                if (!webhookCheck.success) {
+                    // Webhook não acessível - não criar lead ainda
+                    return { 
+                        success: false, 
+                        error: 'Serviço de pagamento temporariamente indisponível. Tente novamente em alguns minutos.',
+                        webhookDown: true 
+                    };
+                }
+                
+                // 2. Webhook OK - Salvar lead no banco
                 const saveResult = await saveLeadToDatabase(leadData);
                 
                 if (!saveResult.success) {
@@ -2204,7 +2314,7 @@
                 
                 leadId = saveResult.leadId;
                 
-                // 2. Gerar link de pagamento via N8N (enviando o ID do banco)
+                // 3. Gerar link de pagamento via N8N (enviando o ID do banco)
                 const paymentLinkResult = await generatePaymentLinkViaN8n({
                     ...leadData,
                     id: leadId  // ID do banco para o webhook identificar
@@ -2239,7 +2349,7 @@
                 
                 return { 
                     success: true, 
-                    isFree: false, 
+                    isFree: planDetails.price === 0, // Gratuito se valor for 0
                     leadId: leadId,
                     paymentId: paymentLinkResult.payment_id,
                     paymentUrl: paymentLinkResult.payment_url,
@@ -2324,7 +2434,7 @@
 
 
             // Validar dados obrigatórios
-            if (!formData.nome_completo || !formData.cpf_cnpj || !formData.whatsapp || !formData.email) {
+            if (!formData.nome_completo || !formData.cpf_cnpj || !formData.whatsapp || !formData.email || !formData.cep) {
                 showValidationError('Por favor, preencha todos os campos obrigatórios.');
                 return;
             }
@@ -2347,6 +2457,18 @@
                 return;
             }
 
+            // Validar email
+            if (!validateEmail(formData.email)) {
+                showValidationError('Email inválido. Digite um email válido.');
+                return;
+            }
+
+            // Validar CEP
+            if (!validateCEPFormat(formData.cep)) {
+                showValidationError('CEP inválido. Digite um CEP válido.');
+                return;
+            }
+
 
             // Mostrar loading
             const submitBtn = document.getElementById('submitBtn');
@@ -2366,8 +2488,9 @@
                     
                     // Verificar se é plano gratuito
                     if (result.isFree) {
-                        // Aqui poderia mostrar uma mensagem ou redirecionar para outra página
-                        alert('✅ Cadastro realizado com sucesso! Em breve você receberá as informações de acesso.');
+                        // Plano gratuito: redirecionar para link ASAAS com valor 0
+                        // O ASAAS confirmará automaticamente e liberará o acesso
+                        window.location.href = result.paymentUrl;
                         return;
                     }
                     
@@ -2403,17 +2526,17 @@
                     if (result.isFree) {
                         successDiv.innerHTML = `
                             <div style="font-size: 64px; margin-bottom: 24px;">🎉</div>
-                            <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; color: white;">Sucesso ao Cadastrar!</h2>
+                            <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; color: white;">Plano Gratuito Confirmado!</h2>
                             <p style="font-size: 18px; margin-bottom: 16px; line-height: 1.5;">
                                 Seu cadastro foi realizado com sucesso!<br>
                                 Bem-vindo ao CONECTADOS!
                             </p>
                             <div style="background: rgba(255, 255, 255, 0.2); padding: 16px; border-radius: 12px; margin: 20px 0;">
                                 <p style="font-size: 16px; margin: 0;">
-                                    📧 <strong>Próximos passos:</strong><br>
-                                    • Verifique seu email<br>
-                                    • Aguarde as informações de acesso<br>
-                                    • Comece a usar o sistema!
+                                    🚀 <strong>Acesso Liberado:</strong><br>
+                                    • Plano gratuito confirmado automaticamente<br>
+                                    • Verifique seu email para as credenciais<br>
+                                    • Comece a usar o sistema agora!
                                 </p>
                             </div>
                             <p style="font-size: 14px; opacity: 0.9; margin-top: 16px;">
@@ -2510,9 +2633,14 @@
                     
                 } else {
                     
-                    // Mostrar toast de erro
-                    const errorMessage = result.error || 'Não foi possível processar seu cadastro. Tente novamente.';
-                    showValidationError(errorMessage);
+                    // Verificar se é erro de webhook indisponível
+                    if (result.webhookDown) {
+                        showValidationError('🚫 Serviço de pagamento temporariamente indisponível. Tente novamente em alguns minutos.');
+                    } else {
+                        // Mostrar toast de erro genérico
+                        const errorMessage = result.error || 'Não foi possível processar seu cadastro. Tente novamente.';
+                        showValidationError(errorMessage);
+                    }
                     
                     return; // Fim
                     
@@ -2662,17 +2790,30 @@
         }
 
         // Função para mostrar erro de validação (toast discreto)
-        function showValidationError(message) {
+        function showValidationError(message, type = 'error') {
             const toast = document.createElement('div');
+            
+            // Configurar cores baseado no tipo
+            let backgroundColor, shadowColor, icon;
+            if (type === 'success') {
+                backgroundColor = 'linear-gradient(135deg, #10B981, #059669)';
+                shadowColor = 'rgba(16, 185, 129, 0.3)';
+                icon = '✅';
+            } else {
+                backgroundColor = 'linear-gradient(135deg, #EF4444, #DC2626)';
+                shadowColor = 'rgba(239, 68, 68, 0.3)';
+                icon = '⚠️';
+            }
+            
             toast.style.cssText = `
                 position: fixed;
                 bottom: 24px;
                 right: 24px;
-                background: linear-gradient(135deg, #EF4444, #DC2626);
+                background: ${backgroundColor};
                 color: white;
                 padding: 16px 20px;
                 border-radius: 12px;
-                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                box-shadow: 0 4px 12px ${shadowColor};
                 z-index: 10001;
                 max-width: 320px;
                 animation: slideInUp 0.3s ease-out;
@@ -2682,9 +2823,9 @@
             
             toast.innerHTML = `
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <div style="font-size: 20px; flex-shrink: 0;">⚠️</div>
+                    <div style="font-size: 20px; flex-shrink: 0;">${icon}</div>
                     <div style="flex: 1;">
-                        <strong style="display: block; margin-bottom: 4px;">Atenção</strong>
+                        <strong style="display: block; margin-bottom: 4px;">${type === 'success' ? 'Sucesso' : 'Atenção'}</strong>
                         <span style="opacity: 0.95;">${message}</span>
                     </div>
                     <button onclick="this.parentElement.parentElement.remove()" 
@@ -2772,10 +2913,17 @@
             if (cepInput) {
                 cepInput.addEventListener('input', function() {
                     this.value = applyCepMask(this.value);
-                });
-                
-                cepInput.addEventListener('blur', function() {
-                    if (this.value.replace(/\D/g, '').length === 8) {
+                    
+                    const cleanCep = this.value.replace(/\D/g, '');
+                    
+                    // Se CEP está vazio, limpar cidade e bairro
+                    if (cleanCep.length === 0) {
+                        document.getElementById('cidade').value = '';
+                        document.getElementById('bairro').value = '';
+                    }
+                    
+                    // Se CEP completo (8 dígitos), validar automaticamente
+                    if (cleanCep.length === 8) {
                         validateCEP(this.value);
                     }
                 });

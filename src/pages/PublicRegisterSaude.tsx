@@ -54,8 +54,8 @@ export default function PublicRegisterSaude() {
   const { bgColor, accentColor } = useMemo(() => {
     const saudeCampaign = getCampaignByCode('saude');
     return {
-      bgColor: saudeCampaign?.background_color || '#14446C',
-      accentColor: saudeCampaign?.accent_color || '#D4AF37'
+      bgColor: saudeCampaign?.primary_color || '#14446C',
+      accentColor: saudeCampaign?.secondary_color || '#D4AF37'
     };
   }, [getCampaignByCode]);
 
@@ -82,8 +82,33 @@ export default function PublicRegisterSaude() {
   };
 
   const validatePhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    return cleaned.length === 11;
+    // Remove todos os caracteres não numéricos
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Deve ter exatamente 11 dígitos (DDD + 9 dígitos)
+    if (cleanPhone.length !== 11) {
+      return false;
+    }
+    
+    // Validar DDD (11 a 99)
+    const ddd = parseInt(cleanPhone.substring(0, 2));
+    if (ddd < 11 || ddd > 99) {
+      return false;
+    }
+    
+    // Validar se o primeiro dígito após DDD é 9 (celular)
+    const firstDigit = parseInt(cleanPhone.substring(2, 3));
+    if (firstDigit !== 9) {
+      return false;
+    }
+    
+    // Validar se não são todos os dígitos iguais
+    const allSameDigits = /^(\d)\1{10}$/.test(cleanPhone);
+    if (allSameDigits) {
+      return false;
+    }
+    
+    return true;
   };
 
   const formatPhone = (value: string) => {
@@ -180,7 +205,19 @@ export default function PublicRegisterSaude() {
     if (!formData.liderWhatsapp) {
       errors.liderWhatsapp = "WhatsApp do líder é obrigatório";
     } else if (!validatePhone(formData.liderWhatsapp)) {
-      errors.liderWhatsapp = "WhatsApp inválido (deve ter 11 dígitos)";
+      const cleanPhone = formData.liderWhatsapp.replace(/\D/g, '');
+      if (cleanPhone.length !== 11) {
+        errors.liderWhatsapp = "WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)";
+      } else {
+        const ddd = parseInt(cleanPhone.substring(0, 2));
+        if (ddd < 11 || ddd > 99) {
+          errors.liderWhatsapp = "DDD inválido. Use um DDD válido (11-99)";
+        } else if (parseInt(cleanPhone.substring(2, 3)) !== 9) {
+          errors.liderWhatsapp = "Número deve começar com 9 (celular)";
+        } else {
+          errors.liderWhatsapp = "Número de telefone inválido";
+        }
+      }
     }
 
     // Validar pessoa
@@ -193,7 +230,19 @@ export default function PublicRegisterSaude() {
     if (!formData.pessoaWhatsapp) {
       errors.pessoaWhatsapp = "WhatsApp da pessoa é obrigatório";
     } else if (!validatePhone(formData.pessoaWhatsapp)) {
-      errors.pessoaWhatsapp = "WhatsApp inválido (deve ter 11 dígitos)";
+      const cleanPhone = formData.pessoaWhatsapp.replace(/\D/g, '');
+      if (cleanPhone.length !== 11) {
+        errors.pessoaWhatsapp = "WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)";
+      } else {
+        const ddd = parseInt(cleanPhone.substring(0, 2));
+        if (ddd < 11 || ddd > 99) {
+          errors.pessoaWhatsapp = "DDD inválido. Use um DDD válido (11-99)";
+        } else if (parseInt(cleanPhone.substring(2, 3)) !== 9) {
+          errors.pessoaWhatsapp = "Número deve começar com 9 (celular)";
+        } else {
+          errors.pessoaWhatsapp = "Número de telefone inválido";
+        }
+      }
     }
 
     // Validar CEP (opcional, mas se preenchido deve ser válido)
@@ -513,7 +562,7 @@ export default function PublicRegisterSaude() {
           type="button"
           onClick={handleSubmit}
           disabled={isLoading}
-          className="w-full h-12 bg-[#D4AF37] hover:bg-[#C19B2E] text-white font-semibold text-lg rounded-lg transition-all duration-200"
+          className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">

@@ -6,8 +6,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Tag, Palette, CheckCircle, AlertCircle } from "lucide-react";
+import { Tag, Palette, CheckCircle, AlertCircle, Package } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Campaign } from "@/hooks/useCampaigns";
 
 export default function PublicRegisterCampanha() {
@@ -21,32 +28,56 @@ export default function PublicRegisterCampanha() {
 
   // Proteção de rota - apenas AdminHitech pode acessar
   useEffect(() => {
-    console.log('🔍 PublicRegisterCampanha - authLoading:', authLoading, 'user:', user?.username, 'isAdminHitech:', isAdminHitech())
-    
-    // Verificar se há dados de usuário no localStorage antes de redirecionar
     const hasUserInStorage = !!localStorage.getItem('loggedUser')
     
     if (!authLoading && (!user || !isAdminHitech()) && !hasUserInStorage) {
-      console.log('🚨 Redirecionando para login - não é AdminHitech')
       navigate('/login');
-    } else if (!authLoading && (!user || !isAdminHitech()) && hasUserInStorage) {
-      console.log('⏳ Usuário no localStorage, aguardando processamento do estado...')
     }
   }, [user, isAdminHitech, authLoading, navigate]);
 
   const [formData, setFormData] = useState({
     name: "",
     code: "",
-    primaryColor: "#1e40af",
-    secondaryColor: "#d4af37",
-    accentColor: "#d4af37",
-    backgroundColor: "#1e3a8a"
+    planoId: "",
+    primaryColor: "#1e3a8a",      // Cor primária (fundo)
+    secondaryColor: "#d4af37"     // Cor secundária (botões)
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string } | null>(null);
   const { toast } = useToast();
+  
+  // Estado para planos disponíveis
+  const [planos, setPlanos] = useState<Array<{ id: string; nome_plano: string; amount: number }>>([]);
+  const [planosLoading, setPlanosLoading] = useState(true);
+
+  // Carregar planos do banco
+  useEffect(() => {
+    const fetchPlanos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('planos_precos')
+          .select('id, nome_plano, amount')
+          .eq('is_active', true)
+          .order('order_display', { ascending: true });
+
+        if (error) throw error;
+        setPlanos(data || []);
+      } catch (error) {
+        console.error('Erro ao carregar planos:', error);
+        toast({
+          title: "Erro ao carregar planos",
+          description: "Não foi possível carregar os planos disponíveis.",
+          variant: "destructive",
+        });
+      } finally {
+        setPlanosLoading(false);
+      }
+    };
+
+    fetchPlanos();
+  }, [toast]);
 
   // Preencher formulário no modo de edição
   useEffect(() => {
@@ -54,10 +85,9 @@ export default function PublicRegisterCampanha() {
       setFormData({
         name: campaignData.name,
         code: campaignData.code,
-        primaryColor: campaignData.primary_color,
-        secondaryColor: campaignData.secondary_color,
-        accentColor: campaignData.accent_color || "#d4af37",
-        backgroundColor: campaignData.background_color || "#1e3a8a"
+        planoId: campaignData.plano_id || "",
+        primaryColor: campaignData.primary_color || "#1e3a8a",
+        secondaryColor: campaignData.secondary_color || "#d4af37"
       });
     }
   }, [editMode, campaignData]);
@@ -101,10 +131,17 @@ export default function PublicRegisterCampanha() {
       errors.name = "Mínimo 3 caracteres";
     }
 
-    if (!formData.code.trim()) {
-      errors.code = "Código da campanha é obrigatório";
-    } else if (!validateCode(formData.code)) {
-      errors.code = "Código inválido";
+    // Validar código apenas no modo de criação (não pode ser alterado na edição)
+    if (!editMode) {
+      if (!formData.code.trim()) {
+        errors.code = "Código da campanha é obrigatório";
+      } else if (!validateCode(formData.code)) {
+        errors.code = "Código inválido";
+      }
+    }
+
+    if (!formData.planoId) {
+      errors.planoId = "Selecione um plano";
     }
 
     if (!validateColor(formData.primaryColor)) {
@@ -113,14 +150,6 @@ export default function PublicRegisterCampanha() {
 
     if (!validateColor(formData.secondaryColor)) {
       errors.secondaryColor = "Cor secundária inválida";
-    }
-
-    if (!validateColor(formData.accentColor)) {
-      errors.accentColor = "Cor accent inválida";
-    }
-
-    if (!validateColor(formData.backgroundColor)) {
-      errors.backgroundColor = "Cor de fundo inválida";
     }
 
     setFormErrors(errors);
@@ -146,14 +175,17 @@ export default function PublicRegisterCampanha() {
       if (editMode && campaignData) {
         // MODO DE EDIÇÃO - Atualizar campanha existente
 
+        // Buscar o nome do plano selecionado
+        const planoSelecionado = planos.find(p => p.id === formData.planoId);
+        
         const { data: updatedCampaign, error: updateError } = await supabase
           .from('campaigns')
           .update({
             name: formData.name,
+            plano_id: formData.planoId,
+            nome_plano: planoSelecionado?.nome_plano || null,
             primary_color: formData.primaryColor,
             secondary_color: formData.secondaryColor,
-            accent_color: formData.accentColor,
-            background_color: formData.backgroundColor,
             updated_at: new Date().toISOString()
           })
           .eq('id', campaignData.id)
@@ -161,7 +193,7 @@ export default function PublicRegisterCampanha() {
           .single();
 
         if (updateError) {
-          throw updateError;
+          throw new Error(updateError.message || 'Erro ao atualizar campanha');
         }
         
         setIsSuccess(true);
@@ -226,16 +258,19 @@ export default function PublicRegisterCampanha() {
         }
 
         // PASSO 3: Criar a nova campanha (sem admin_user_id - pode ter vários admins)
+        // Buscar o nome do plano selecionado
+        const planoSelecionado = planos.find(p => p.id === formData.planoId);
+        
         const { data: newCampaign, error: insertError } = await supabase
           .from('campaigns')
           .insert([
             {
               name: formData.name,
               code: formData.code,
+              plano_id: formData.planoId,
+              nome_plano: planoSelecionado?.nome_plano || null,
               primary_color: formData.primaryColor,
               secondary_color: formData.secondaryColor,
-              accent_color: formData.accentColor,
-              background_color: formData.backgroundColor,
               is_active: true
             }
           ])
@@ -380,7 +415,7 @@ export default function PublicRegisterCampanha() {
       <div className="fixed top-4 left-4 z-50">
         <Button
           onClick={() => navigate('/dashboard')}
-          className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium"
+          className="bg-[#CFBA7F] hover:bg-[#CFBA7F]/90 text-white font-medium rounded-lg"
         >
           Voltar ao Dashboard
         </Button>
@@ -462,6 +497,36 @@ export default function PublicRegisterCampanha() {
               </div>
             )}
           </div>
+
+          {/* Campo Plano */}
+          <div className="space-y-1">
+            <label className="text-white text-sm font-medium">Plano <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Package className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <Select
+                value={formData.planoId}
+                onValueChange={(value) => handleInputChange('planoId', value)}
+                disabled={planosLoading}
+              >
+                <SelectTrigger className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.planoId ? 'border-red-500' : ''}`}>
+                  <SelectValue placeholder={planosLoading ? "Carregando planos..." : "Selecione um plano"} />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 text-white border-gray-700">
+                  {planos.map((plano) => (
+                    <SelectItem key={plano.id} value={plano.id}>
+                      {plano.nome_plano} (R$ {plano.amount.toFixed(2).replace('.', ',')})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {formErrors.planoId && (
+              <div className="flex items-center gap-1 text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                <span>{formErrors.planoId}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* SEÇÃO: Cores da Campanha */}
@@ -470,15 +535,15 @@ export default function PublicRegisterCampanha() {
             <h3 className="text-white font-semibold text-lg mb-4">Cores da Campanha</h3>
           </div>
 
-          {/* Cor Primária */}
+          {/* Cor Primária (Fundo) */}
           <div className="space-y-1">
-            <label className="text-white text-sm font-medium">Cor Primária</label>
+            <label className="text-white text-sm font-medium">Cor Primária (Fundo)</label>
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <Palette className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
                 <Input
                   type="text"
-                  placeholder="#1e40af"
+                  placeholder="#1e3a8a"
                   value={formData.primaryColor}
                   onChange={(e) => handleInputChange('primaryColor', e.target.value)}
                   className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.primaryColor ? 'border-red-500' : ''}`}
@@ -500,9 +565,9 @@ export default function PublicRegisterCampanha() {
             )}
           </div>
 
-          {/* Cor Secundária */}
+          {/* Cor Secundária (Botões) */}
           <div className="space-y-1">
-            <label className="text-white text-sm font-medium">Cor Secundária (Dourado)</label>
+            <label className="text-white text-sm font-medium">Cor Secundária (Botões)</label>
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <Palette className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
@@ -530,66 +595,6 @@ export default function PublicRegisterCampanha() {
             )}
           </div>
 
-          {/* Cor Accent */}
-          <div className="space-y-1">
-            <label className="text-white text-sm font-medium">Cor Accent (Destaque)</label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <Palette className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                <Input
-                  type="text"
-                  placeholder="#d4af37"
-                  value={formData.accentColor}
-                  onChange={(e) => handleInputChange('accentColor', e.target.value)}
-                  className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.accentColor ? 'border-red-500' : ''}`}
-                  required
-                />
-              </div>
-              <input
-                type="color"
-                value={formData.accentColor}
-                onChange={(e) => handleInputChange('accentColor', e.target.value)}
-                className="w-16 h-12 rounded-lg cursor-pointer bg-gray-800 border-gray-700"
-              />
-            </div>
-            {formErrors.accentColor && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.accentColor}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Cor de Fundo */}
-          <div className="space-y-1">
-            <label className="text-white text-sm font-medium">Cor de Fundo</label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <Palette className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                <Input
-                  type="text"
-                  placeholder="#1e3a8a"
-                  value={formData.backgroundColor}
-                  onChange={(e) => handleInputChange('backgroundColor', e.target.value)}
-                  className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.backgroundColor ? 'border-red-500' : ''}`}
-                  required
-                />
-              </div>
-              <input
-                type="color"
-                value={formData.backgroundColor}
-                onChange={(e) => handleInputChange('backgroundColor', e.target.value)}
-                className="w-16 h-12 rounded-lg cursor-pointer bg-gray-800 border-gray-700"
-              />
-            </div>
-            {formErrors.backgroundColor && (
-              <div className="flex items-center gap-1 text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                <span>{formErrors.backgroundColor}</span>
-              </div>
-            )}
-          </div>
-
           {/* Preview das Cores */}
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <p className="text-white text-sm font-medium mb-3">Preview das Cores:</p>
@@ -597,30 +602,16 @@ export default function PublicRegisterCampanha() {
               <div 
                 className="h-16 rounded-lg border-2 border-gray-600 flex items-center justify-center text-white text-xs font-medium"
                 style={{ backgroundColor: formData.primaryColor }}
-                title="Cor Primária"
+                title="Cor Primária (Fundo)"
               >
-                Primária
+                Primária (Fundo)
               </div>
               <div 
                 className="h-16 rounded-lg border-2 border-gray-600 flex items-center justify-center text-white text-xs font-medium"
                 style={{ backgroundColor: formData.secondaryColor }}
-                title="Cor Secundária"
+                title="Cor Secundária (Botões)"
               >
-                Secundária
-              </div>
-              <div 
-                className="h-16 rounded-lg border-2 border-gray-600 flex items-center justify-center text-white text-xs font-medium"
-                style={{ backgroundColor: formData.accentColor }}
-                title="Cor Accent"
-              >
-                Accent
-              </div>
-              <div 
-                className="h-16 rounded-lg border-2 border-gray-600 flex items-center justify-center text-white text-xs font-medium"
-                style={{ backgroundColor: formData.backgroundColor }}
-                title="Cor de Fundo"
-              >
-                Fundo
+                Secundária (Botões)
               </div>
             </div>
           </div>
@@ -631,11 +622,11 @@ export default function PublicRegisterCampanha() {
           type="button"
           onClick={handleSubmit}
           disabled={isLoading}
-          className="w-full h-12 bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-semibold text-lg rounded-lg transition-all duration-200"
+          className="w-full h-12 bg-[#CFBA7F] hover:bg-[#CFBA7F]/90 text-[#14446C] font-semibold text-lg rounded-lg transition-all duration-200"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-institutional-blue border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-[#14446C] border-t-transparent rounded-full animate-spin" />
               {editMode ? 'Atualizando...' : 'Cadastrando...'}
             </div>
           ) : (

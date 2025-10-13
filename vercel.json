@@ -9,6 +9,16 @@
       "source": "/success.html",
       "destination": "/success",
       "permanent": true
+    },
+    {
+      "source": "/landing.html",
+      "destination": "/comece-agora",
+      "permanent": true
+    },
+    {
+      "source": "/sucesso.html",
+      "destination": "/success",
+      "permanent": true
     }
   ],
   "rewrites": [
@@ -23,6 +33,26 @@
     { 
       "source": "/(.*)", 
       "destination": "/" 
+    }
+  ],
+  "headers": [
+    {
+      "source": "/comece-agora",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/success",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
     }
   ]
 }

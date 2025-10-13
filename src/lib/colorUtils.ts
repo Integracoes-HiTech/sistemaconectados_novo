@@ -138,7 +138,7 @@ export function getOverlayColors(baseColor: string) {
  * ```typescript
  * import { getTextColor, getOverlayColors } from '@/lib/colorUtils';
  * 
- * const bgColor = campaign?.background_color || '#14446C';
+ * const bgColor = campaign?.primary_color || '#14446C';
  * const textColor = getTextColor(bgColor); // Retorna '#FFFFFF' ou '#000000'
  * const overlay = getOverlayColors(bgColor); // Retorna objeto com cores calculadas
  * 

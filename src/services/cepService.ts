@@ -40,14 +40,12 @@ async function buscarViaCep(cepLimpo: string): Promise<CepData> {
     const data = await response.json();
 
     if (data.erro) {
-      throw new Error("CEP não encontrado no ViaCEP");
+      throw new Error("CEP não encontrado");
     }
 
     if (!data.localidade || !data.bairro) {
       throw new Error("Dados incompletos retornados pelo ViaCEP");
     }
-
-    console.log('✅ ViaCEP encontrou CEP:', cepLimpo);
 
     return {
       cidade: data.localidade.trim(),
@@ -82,8 +80,6 @@ async function buscarBrasilApi(cepLimpo: string): Promise<CepData> {
     if (!data.city || !data.neighborhood) {
       throw new Error("Dados incompletos retornados pela BrasilAPI");
     }
-
-    console.log('✅ BrasilAPI encontrou CEP:', cepLimpo);
 
     // Converter formato BrasilAPI para CepData
     return {
@@ -120,8 +116,6 @@ async function buscarOpenCep(cepLimpo: string): Promise<CepData> {
       throw new Error("Dados incompletos retornados pela OpenCEP");
     }
 
-    console.log('✅ OpenCEP encontrou CEP:', cepLimpo);
-
     return {
       cidade: data.localidade.trim(),
       bairro: data.bairro.trim(),
@@ -153,29 +147,15 @@ export async function buscarCep(cep: string): Promise<CepData> {
     try {
       return await buscarViaCep(cepLimpo);
     } catch (viaCepError) {
-      const errorMsg = viaCepError instanceof Error ? viaCepError.message : 'Erro desconhecido';
-      console.warn(`⚠️ ViaCEP falhou para CEP ${cepLimpo}: ${errorMsg}`);
-      console.warn('   Tentando BrasilAPI...');
-
       // FALLBACK 1: Tentar BrasilAPI
       try {
         return await buscarBrasilApi(cepLimpo);
       } catch (brasilApiError) {
-        const errorMsg = brasilApiError instanceof Error ? brasilApiError.message : 'Erro desconhecido';
-        console.warn(`⚠️ BrasilAPI falhou para CEP ${cepLimpo}: ${errorMsg}`);
-        console.warn('   Tentando OpenCEP...');
-
         // FALLBACK 2: Tentar OpenCEP
         try {
           return await buscarOpenCep(cepLimpo);
         } catch (openCepError) {
-          const errorMsg = openCepError instanceof Error ? openCepError.message : 'Erro desconhecido';
-          console.error(`❌ Todas as APIs falharam para CEP ${cepLimpo}`);
-          console.error(`   ViaCEP: ${viaCepError instanceof Error ? viaCepError.message : 'erro'}`);
-          console.error(`   BrasilAPI: ${brasilApiError instanceof Error ? brasilApiError.message : 'erro'}`);
-          console.error(`   OpenCEP: ${errorMsg}`);
-          
-          throw new Error("CEP não encontrado em nenhuma das APIs disponíveis. Verifique o CEP informado.");
+          throw new Error("CEP não encontrado Verifique o CEP informado.");
         }
       }
     }

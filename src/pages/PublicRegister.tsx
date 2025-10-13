@@ -91,8 +91,8 @@ export default function PublicRegister() {
   const { bgColor, accentColor, textColor, overlayColors } = useMemo(() => {
     const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
     const campaign = getCampaignByCode(campaignCode);
-    const bg = campaign?.background_color || '#14446C';
-    const accent = campaign?.accent_color || '#D4AF37';
+    const bg = campaign?.primary_color || '#14446C';
+    const accent = campaign?.secondary_color || '#D4AF37';
     
     return {
       bgColor: bg,
@@ -121,8 +121,31 @@ export default function PublicRegister() {
   const validatePhone = (phone: string) => {
     // Remove todos os caracteres não numéricos
     const cleanPhone = phone.replace(/\D/g, '');
+    
     // Deve ter exatamente 11 dígitos (DDD + 9 dígitos)
-    return cleanPhone.length === 11;
+    if (cleanPhone.length !== 11) {
+      return false;
+    }
+    
+    // Validar DDD (11 a 99)
+    const ddd = parseInt(cleanPhone.substring(0, 2));
+    if (ddd < 11 || ddd > 99) {
+      return false;
+    }
+    
+    // Validar se o primeiro dígito após DDD é 9 (celular)
+    const firstDigit = parseInt(cleanPhone.substring(2, 3));
+    if (firstDigit !== 9) {
+      return false;
+    }
+    
+    // Validar se não são todos os dígitos iguais
+    const allSameDigits = /^(\d)\1{10}$/.test(cleanPhone);
+    if (allSameDigits) {
+      return false;
+    }
+    
+    return true;
   };
 
   const formatPhone = (value: string) => {
@@ -552,7 +575,19 @@ export default function PublicRegister() {
     if (!formData.phone.trim()) {
       errors.phone = 'WhatsApp é obrigatório';
     } else if (!validatePhone(formData.phone)) {
-      errors.phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      const cleanPhone = formData.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 11) {
+        errors.phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      } else {
+        const ddd = parseInt(cleanPhone.substring(0, 2));
+        if (ddd < 11 || ddd > 99) {
+          errors.phone = 'DDD inválido. Use um DDD válido (11-99)';
+        } else if (parseInt(cleanPhone.substring(2, 3)) !== 9) {
+          errors.phone = 'Número deve começar com 9 (celular)';
+        } else {
+          errors.phone = 'Número de telefone inválido';
+        }
+      }
     }
     
     if (!formData.instagram.trim()) {
@@ -590,7 +625,19 @@ export default function PublicRegister() {
     if (!formData.couple_phone.trim()) {
       errors.couple_phone = 'WhatsApp do parceiro é obrigatório';
     } else if (!validatePhone(formData.couple_phone)) {
-      errors.couple_phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      const cleanPhone = formData.couple_phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 11) {
+        errors.couple_phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      } else {
+        const ddd = parseInt(cleanPhone.substring(0, 2));
+        if (ddd < 11 || ddd > 99) {
+          errors.couple_phone = 'DDD inválido. Use um DDD válido (11-99)';
+        } else if (parseInt(cleanPhone.substring(2, 3)) !== 9) {
+          errors.couple_phone = 'Número deve começar com 9 (celular)';
+        } else {
+          errors.couple_phone = 'Número de telefone inválido';
+        }
+      }
     }
     
     if (!formData.couple_instagram.trim()) {
@@ -1005,8 +1052,8 @@ export default function PublicRegister() {
         {/* Tela de Sucesso */}
         <div className="w-full max-w-md text-center">
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <UserPlus className="w-16 h-16 mx-auto mb-4" style={{ color: accentColor }} />
-            <h2 className="text-2xl font-bold mb-2 text-gray-800">
+            <UserPlus className="w-16 h-16 mx-auto mb-4" style={{ color: '#CFBA7F' }} />
+            <h2 className="text-2xl font-bold mb-2" style={{ color: '#14446C' }}>
               Cadastro Realizado!
             </h2>
             <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: overlayColors.bgMedium }}>
@@ -1015,7 +1062,7 @@ export default function PublicRegister() {
             </p>
               <div className="space-y-3 text-sm">
                 <div className="p-3 rounded-lg border" style={{ backgroundColor: overlayColors.bgLight, borderColor: overlayColors.border }}>
-                  <p className="font-medium mb-2 text-gray-800">Conta Compartilhada</p>
+                  <p className="font-medium mb-2" style={{ color: '#14446C' }}>Conta Compartilhada</p>
                   <p className="text-gray-700"><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
                   <p className="text-gray-700"><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
                   <p className="text-xs mt-2 text-gray-600">
@@ -1088,7 +1135,7 @@ export default function PublicRegister() {
                   }
                 }}
                 className="w-full h-12 font-semibold text-lg rounded-lg transition-all duration-200 text-white"
-                style={{ backgroundColor: accentColor }}
+                style={{ backgroundColor: '#CFBA7F' }}
               >
                 <div className="flex items-center gap-2">
                   <LogIn className="w-5 h-5" />
@@ -1138,7 +1185,7 @@ export default function PublicRegister() {
             </div>
 
             {/* Título */}
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            <h1 className="text-2xl font-bold mb-4" style={{ color: '#14446C' }}>
               Link Desativado
             </h1>
 
@@ -1549,7 +1596,7 @@ export default function PublicRegister() {
           type="button"
           onClick={handleSubmit}
           disabled={isLoading}
-          className="w-full h-12 bg-[#D4AF37] hover:bg-[#C19B2E] text-white font-semibold text-lg rounded-lg transition-all duration-200"
+          className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">

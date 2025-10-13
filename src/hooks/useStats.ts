@@ -88,6 +88,7 @@ export const useStats = (referrer?: string, campaign?: string) => {
     stats,
     loading,
     error,
-    refetch: fetchStats
+    refetch: fetchStats,
+    fetchStats
   }
 }

@@ -225,6 +225,7 @@ export const useReports = (referrer?: string, campaign?: string) => {
     reportData,
     loading,
     error,
-    refetch: fetchReportData
+    refetch: fetchReportData,
+    fetchReportData
   }
 }

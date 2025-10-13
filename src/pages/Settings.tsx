@@ -224,7 +224,7 @@ export default function Settings() {
               <Button
                 onClick={handleLogout}
                 variant="outline"
-                className="border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10"
+                className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
               >
                 Sair
               </Button>
@@ -241,9 +241,8 @@ export default function Settings() {
             <Button
               onClick={() => navigate("/dashboard")}
               variant="outline"
-              className="border-institutional-gold text-institutional-gold hover:bg-institutional-gold/10"
+              className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium text-sm"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
               Voltar ao Dashboard
             </Button>
           </div>
@@ -255,8 +254,8 @@ export default function Settings() {
         {/* Controle de Tipo de Links */}
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-600">
-              <Users className="w-5 h-5" />
+            <CardTitle className="flex items-center gap-2" style={{ color: '#14446C' }}>
+              <Users className="w-5 h-5" style={{ color: '#14446C' }} />
               Controle de Tipo de Links
             </CardTitle>
             <CardDescription>

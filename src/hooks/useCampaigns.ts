@@ -6,13 +6,13 @@ export interface Campaign {
   id: string
   name: string
   code: string
-  primary_color: string
-  secondary_color: string
-  accent_color: string
-  background_color: string
-  description: string | null
+  primary_color: string      // Cor primária (fundo)
+  secondary_color: string    // Cor secundária (botões)
+  description?: string | null
   is_active: boolean
-  admin_user_id: string | null
+  admin_user_id?: string | null
+  plano_id?: string | null // ID do plano
+  nome_plano?: string // Nome do plano (vem direto da tabela campaigns)
   created_at: string
   updated_at: string
 }

@@ -138,7 +138,7 @@
         viaCepData = await viaCepResponse.json();
         
         if (viaCepData.erro) {
-          throw new Error('CEP não encontrado no ViaCEP');
+          throw new Error('CEP não encontrado');
         }
       } catch (viaCepError) {
         console.warn(`⚠️ ViaCEP falhou para CEP ${cepLimpo}, tentando API alternativa...`, viaCepError.message);
