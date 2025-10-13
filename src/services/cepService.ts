@@ -1,8 +1,11 @@
 // =====================================================
-// SERVIÇO: BUSCA DE CEP VIA VIA CEP API
+// SERVIÇO: BUSCA DE CEP COM FALLBACK DE MÚLTIPLAS APIS
 // =====================================================
 // Este serviço busca informações de endereço através do CEP
-// usando a API pública do ViaCEP
+// usando 3 APIs com sistema de fallback automático:
+// 1. ViaCEP (prioridade)
+// 2. BrasilAPI (fallback 1)
+// 3. OpenCEP (fallback 2)
 // =====================================================
 
 export interface CepData {
@@ -19,14 +22,125 @@ export interface CepError {
 }
 
 /**
- * Busca informações de endereço através do CEP
+ * Busca CEP via ViaCEP (API principal)
+ */
+async function buscarViaCep(cepLimpo: string): Promise<CepData> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos
+
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.erro) {
+      throw new Error("CEP não encontrado no ViaCEP");
+    }
+
+    if (!data.localidade || !data.bairro) {
+      throw new Error("Dados incompletos retornados pelo ViaCEP");
+    }
+
+    console.log('✅ ViaCEP encontrou CEP:', cepLimpo);
+
+    return {
+      cidade: data.localidade.trim(),
+      bairro: data.bairro.trim(),
+      logradouro: data.logradouro?.trim() || '',
+      uf: data.uf?.trim() || '',
+      cep: data.cep?.trim() || cepLimpo
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Busca CEP via BrasilAPI (Fallback 1)
+ */
+async function buscarBrasilApi(cepLimpo: string): Promise<CepData> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cepLimpo}`, {
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.city || !data.neighborhood) {
+      throw new Error("Dados incompletos retornados pela BrasilAPI");
+    }
+
+    console.log('✅ BrasilAPI encontrou CEP:', cepLimpo);
+
+    // Converter formato BrasilAPI para CepData
+    return {
+      cidade: data.city.trim(),
+      bairro: data.neighborhood.trim(),
+      logradouro: data.street?.trim() || '',
+      uf: data.state?.trim() || '',
+      cep: data.cep?.trim() || cepLimpo
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Busca CEP via OpenCEP (Fallback 2)
+ */
+async function buscarOpenCep(cepLimpo: string): Promise<CepData> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`https://opencep.com/v1/${cepLimpo}.json`, {
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.localidade || !data.bairro) {
+      throw new Error("Dados incompletos retornados pela OpenCEP");
+    }
+
+    console.log('✅ OpenCEP encontrou CEP:', cepLimpo);
+
+    return {
+      cidade: data.localidade.trim(),
+      bairro: data.bairro.trim(),
+      logradouro: data.logradouro?.trim() || '',
+      uf: data.uf?.trim() || '',
+      cep: data.cep?.trim() || cepLimpo
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Busca informações de endereço através do CEP com fallback de múltiplas APIs
  * @param cep - CEP a ser consultado (com ou sem formatação)
  * @returns Promise com dados do endereço ou erro
  */
 export async function buscarCep(cep: string): Promise<CepData> {
   try {
-    // Buscando CEP
-    
     // Remove traços, espaços e caracteres não numéricos
     const cepLimpo = cep.replace(/\D/g, "");
 
@@ -35,44 +149,37 @@ export async function buscarCep(cep: string): Promise<CepData> {
       throw new Error("Por favor, informe um CEP válido com 8 dígitos.");
     }
 
-    const url = `https://viacep.com.br/ws/${cepLimpo}/json/`;
+    // PRIORIDADE 1: Tentar ViaCEP
+    try {
+      return await buscarViaCep(cepLimpo);
+    } catch (viaCepError) {
+      const errorMsg = viaCepError instanceof Error ? viaCepError.message : 'Erro desconhecido';
+      console.warn(`⚠️ ViaCEP falhou para CEP ${cepLimpo}: ${errorMsg}`);
+      console.warn('   Tentando BrasilAPI...');
 
-    // Fazendo requisição para API
+      // FALLBACK 1: Tentar BrasilAPI
+      try {
+        return await buscarBrasilApi(cepLimpo);
+      } catch (brasilApiError) {
+        const errorMsg = brasilApiError instanceof Error ? brasilApiError.message : 'Erro desconhecido';
+        console.warn(`⚠️ BrasilAPI falhou para CEP ${cepLimpo}: ${errorMsg}`);
+        console.warn('   Tentando OpenCEP...');
 
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Erro ao consultar o ViaCEP: ${response.status}`);
+        // FALLBACK 2: Tentar OpenCEP
+        try {
+          return await buscarOpenCep(cepLimpo);
+        } catch (openCepError) {
+          const errorMsg = openCepError instanceof Error ? openCepError.message : 'Erro desconhecido';
+          console.error(`❌ Todas as APIs falharam para CEP ${cepLimpo}`);
+          console.error(`   ViaCEP: ${viaCepError instanceof Error ? viaCepError.message : 'erro'}`);
+          console.error(`   BrasilAPI: ${brasilApiError instanceof Error ? brasilApiError.message : 'erro'}`);
+          console.error(`   OpenCEP: ${errorMsg}`);
+          
+          throw new Error("CEP não encontrado em nenhuma das APIs disponíveis. Verifique o CEP informado.");
+        }
+      }
     }
-
-    const data = await response.json();
-
-    // Dados recebidos do ViaCEP
-
-    if (data.erro) {
-      throw new Error("CEP não encontrado!");
-    }
-
-    // Validação dos dados retornados
-    if (!data.localidade || !data.bairro) {
-      throw new Error("Dados incompletos retornados pelo ViaCEP");
-    }
-
-    // Retorna dados formatados
-    const resultado: CepData = {
-      cidade: data.localidade.trim(),
-      bairro: data.bairro.trim(),
-      logradouro: data.logradouro?.trim() || '',
-      uf: data.uf?.trim() || '',
-      cep: data.cep?.trim() || cepLimpo
-    };
-
-    // CEP encontrado
-    return resultado;
-
   } catch (error) {
-    // Erro ao buscar CEP
-    
     if (error instanceof Error) {
       throw error;
     }

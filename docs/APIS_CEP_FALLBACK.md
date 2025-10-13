@@ -171,6 +171,27 @@ Modifique o valor em `AbortSignal.timeout(5000)` (em milissegundos)
 
 ---
 
+## 🔧 **Implementações no Sistema**
+
+### **1. Mapa Interativo** (`public/mapas/mapa.html`)
+- ✅ Sistema de fallback implementado diretamente no JavaScript
+- ✅ Busca CEP de membros da campanha B
+- ✅ Exibe marcadores no mapa com geolocalização
+
+### **2. Cadastro Público** (`src/services/cepService.ts`)
+- ✅ Sistema de fallback implementado no serviço TypeScript
+- ✅ Usado no `PublicRegister.tsx` para preenchimento automático
+- ✅ Busca CEP do membro e do cônjuge
+- ✅ Preenche automaticamente cidade e bairro
+
+### **Vantagens da implementação no `cepService.ts`:**
+- ✅ Reutilizável em todo o sistema React/TypeScript
+- ✅ Type-safe com interfaces TypeScript
+- ✅ Fácil manutenção centralizada
+- ✅ Mesma lógica de fallback do mapa
+
+---
+
 **Última atualização:** 13/10/2025
-**Desenvolvido para:** Sistema CONECTADOS - Mapa Interativo
+**Desenvolvido para:** Sistema CONECTADOS - Mapa Interativo e Cadastro Público
 
