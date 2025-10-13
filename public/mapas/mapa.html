@@ -4,11 +4,11 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="
-      default-src 'self' https://*.supabase.co https://*.tile.openstreetmap.org https://unpkg.com https://cdn.jsdelivr.net https://viacep.com.br https://nominatim.openstreetmap.org;
+      default-src 'self' https://*.supabase.co https://*.tile.openstreetmap.org https://unpkg.com https://cdn.jsdelivr.net https://viacep.com.br https://brasilapi.com.br https://opencep.com https://nominatim.openstreetmap.org;
       script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net;
       style-src 'self' 'unsafe-inline' https://unpkg.com;
       img-src 'self' data: https://*.tile.openstreetmap.org;
-      connect-src 'self' https://*.supabase.co https://viacep.com.br https://nominatim.openstreetmap.org;
+      connect-src 'self' https://*.supabase.co https://viacep.com.br https://brasilapi.com.br https://opencep.com https://nominatim.openstreetmap.org;
       frame-ancestors 'self' https://conectadosdigital.com.br http://localhost:*;
     ">
     <title>Mapa de Membros - Campanha B</title>
@@ -120,7 +120,7 @@
     return coresPorMunicipio[cidadeLimpa];
   }
 
-  // 3) Função para buscar coordenadas do CEP
+  // 3) Função para buscar coordenadas do CEP com múltiplas APIs (fallback)
   async function buscarCoordenadasPorCEP(cep) {
     if (!cep) return null;
     
@@ -128,11 +128,68 @@
       // Limpar CEP (remover traços e espaços)
       const cepLimpo = cep.replace(/\D/g, '');
       
-      // MÉTODO 1: Buscar endereço via ViaCEP
-      const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const viaCepData = await viaCepResponse.json();
+      let viaCepData = null;
       
-      if (viaCepData.erro) {
+      // PRIORIDADE 1: ViaCEP (API principal)
+      try {
+        const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
+          signal: AbortSignal.timeout(5000) // timeout 5 segundos
+        });
+        viaCepData = await viaCepResponse.json();
+        
+        if (viaCepData.erro) {
+          throw new Error('CEP não encontrado no ViaCEP');
+        }
+      } catch (viaCepError) {
+        console.warn(`⚠️ ViaCEP falhou para CEP ${cepLimpo}, tentando API alternativa...`, viaCepError.message);
+        
+        // FALLBACK 1: BrasilAPI
+        try {
+          const brasilApiResponse = await fetch(`https://brasilapi.com.br/api/cep/v2/${cepLimpo}`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          const brasilApiData = await brasilApiResponse.json();
+          
+          // Converter formato BrasilAPI para formato ViaCEP
+          viaCepData = {
+            cep: brasilApiData.cep,
+            logradouro: brasilApiData.street || '',
+            complemento: '',
+            bairro: brasilApiData.neighborhood || '',
+            localidade: brasilApiData.city,
+            uf: brasilApiData.state,
+            erro: false
+          };
+          console.log(`✅ BrasilAPI encontrou CEP ${cepLimpo}`);
+        } catch (brasilApiError) {
+          console.warn(`⚠️ BrasilAPI falhou para CEP ${cepLimpo}, tentando OpenCEP...`, brasilApiError.message);
+          
+          // FALLBACK 2: OpenCEP
+          try {
+            const openCepResponse = await fetch(`https://opencep.com/v1/${cepLimpo}.json`, {
+              signal: AbortSignal.timeout(5000)
+            });
+            const openCepData = await openCepResponse.json();
+            
+            // Converter formato OpenCEP para formato ViaCEP
+            viaCepData = {
+              cep: openCepData.cep,
+              logradouro: openCepData.logradouro || '',
+              complemento: openCepData.complemento || '',
+              bairro: openCepData.bairro || '',
+              localidade: openCepData.localidade,
+              uf: openCepData.uf,
+              erro: false
+            };
+            console.log(`✅ OpenCEP encontrou CEP ${cepLimpo}`);
+          } catch (openCepError) {
+            console.error(`❌ Todas as APIs falharam para CEP ${cepLimpo}`);
+            return null;
+          }
+        }
+      }
+      
+      if (!viaCepData || viaCepData.erro) {
         return null;
       }
       
