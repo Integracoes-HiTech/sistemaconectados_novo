@@ -32,6 +32,7 @@ export interface Member {
   deleted_at?: string | null
   created_at: string
   updated_at: string
+  campaign: string
 }
 
 export interface MemberStats {
@@ -54,7 +55,7 @@ export interface SystemSettings {
   paid_contracts_start_date: string
 }
 
-export const useMembers = (referrer?: string, campaign?: string) => {
+export const useMembers = (referrer?: string, campaign?: string, maxMembers: number = 1500) => {
   const [members, setMembers] = useState<Member[]>([])
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null)
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null)
@@ -106,8 +107,8 @@ export const useMembers = (referrer?: string, campaign?: string) => {
           red_members: data.red_members || 0,
           top_1500_members: data.top_1500_members || 0,
           current_member_count: data.current_member_count || 0,
-          max_member_limit: data.max_member_limit || 1500,
-          can_register_more: (data.current_member_count || 0) < (data.max_member_limit || 1500)
+        max_member_limit: data.max_member_limit || maxMembers,
+        can_register_more: (data.current_member_count || 0) < (data.max_member_limit || maxMembers)
         }
 
         setMemberStats(stats)
@@ -138,8 +139,8 @@ export const useMembers = (referrer?: string, campaign?: string) => {
         red_members: redMembers,
         top_1500_members: top1500Members,
         current_member_count: totalMembers,
-        max_member_limit: 1500,
-        can_register_more: totalMembers < 1500
+        max_member_limit: maxMembers,
+        can_register_more: totalMembers < maxMembers
       }
 
       setMemberStats(stats)
@@ -157,7 +158,7 @@ export const useMembers = (referrer?: string, campaign?: string) => {
       if (error) throw error
 
       const settings: SystemSettings = {
-        max_members: 1500,
+        max_members: maxMembers,
         contracts_per_member: 15,
         ranking_green_threshold: 15,
         ranking_yellow_threshold: 1,
@@ -199,20 +200,6 @@ export const useMembers = (referrer?: string, campaign?: string) => {
     try {
       // Hook useMembers - Dados recebidos
       
-      // Verificar se pode cadastrar mais membros
-      try {
-        const { data: canRegister, error: canRegisterError } = await supabase
-          .rpc('can_register_member')
-
-        if (canRegisterError) {
-          console.warn('Função can_register_member não encontrada, continuando...')
-        } else if (!canRegister) {
-          throw new Error('Limite de 1.500 membros atingido. Não é possível cadastrar novos membros.')
-        }
-      } catch (rpcError) {
-        console.warn('Erro ao verificar limite de membros, continuando...', rpcError)
-      }
-
       // Inserindo membro no banco
       const insertData = {
         ...memberData,

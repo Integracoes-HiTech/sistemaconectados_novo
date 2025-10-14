@@ -24,7 +24,24 @@ import { buscarCep, validarFormatoCep, formatarCep, limparCep, CepData } from "@
 import { AuthUser, supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useCampaigns } from "@/hooks/useCampaigns";
+import { usePlanFeatures } from "@/hooks/usePlanFeatures";
 import { getTextColor, getOverlayColors } from "@/lib/colorUtils";
+
+// Função para buscar cores iniciais da campanha do localStorage
+const getInitialCampaignColors = (linkId?: string): { bgColor: string; accentColor: string } => {
+  try {
+    // Tentar buscar cores salvas para este link específico
+    if (linkId) {
+      const savedColors = localStorage.getItem(`link_colors_${linkId}`);
+      if (savedColors) {
+        return JSON.parse(savedColors);
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao buscar cores iniciais do link:', err);
+  }
+  return { bgColor: '#14446C', accentColor: '#D4AF37' }; // Cores padrão
+};
 
 export default function PublicRegister() {
   const { linkId } = useParams();
@@ -82,25 +99,94 @@ export default function PublicRegister() {
   const { getUserByLinkId, incrementClickCount } = useUserLinks();
   const { createUserWithCredentials } = useCredentials();
   const { addMember } = useMembers();
-  const { shouldShowMemberLimitAlert, checkMemberLimit } = useSystemSettings();
+  const { shouldShowMemberLimitAlert } = useSystemSettings();
   const { addFriend } = useFriends();
   const { toast } = useToast();
   const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
+  const { features: planFeatures } = usePlanFeatures();
   
+  // Estado inicial das cores (do localStorage)
+  const [initialColors] = useState(() => getInitialCampaignColors(linkId));
+  
+  // Função para verificar limite de membros baseado no plano
+  const checkPlanMemberLimit = async () => {
+    try {
+      const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+      
+      console.log('🔍 Checking member limit for campaign:', campaignCode);
+      console.log('📊 Plan features:', {
+        maxMembers: planFeatures.maxMembers,
+        planName: planFeatures.planName
+      });
+      
+      // Contar membros atuais da campanha
+      const { data: membersData, error } = await supabase
+        .from('members')
+        .select('id')
+        .eq('campaign', campaignCode)
+        .eq('status', 'Ativo')
+        .is('deleted_at', null);
+
+      if (error) throw error;
+
+      const currentCount = membersData?.length || 0;
+      const maxLimit = planFeatures.maxMembers;
+
+      console.log('📈 Member count result:', {
+        currentCount,
+        maxLimit,
+        canRegister: currentCount < maxLimit,
+        percentage: (currentCount / maxLimit) * 100
+      });
+
+      return {
+        current: currentCount,
+        max: maxLimit,
+        canRegister: currentCount < maxLimit,
+        percentage: (currentCount / maxLimit) * 100
+      };
+    } catch (err) {
+      console.error('❌ Error checking member limit:', err);
+      return {
+        current: 0,
+        max: planFeatures.maxMembers,
+        canRegister: true,
+        percentage: 0
+      };
+    }
+  };
+
   // Buscar cores da campanha baseado no link/referrer com memoização
   const { bgColor, accentColor, textColor, overlayColors } = useMemo(() => {
     const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
     const campaign = getCampaignByCode(campaignCode);
-    const bg = campaign?.primary_color || '#14446C';
-    const accent = campaign?.secondary_color || '#D4AF37';
     
+    // Se tiver campanha do banco, usar essas cores
+    if (campaign?.primary_color) {
+      const bg = campaign.primary_color;
+      const accent = campaign.secondary_color || '#D4AF37';
+      
+      // Salvar no localStorage para próxima vez
+      if (linkId) {
+        localStorage.setItem(`link_colors_${linkId}`, JSON.stringify({ bgColor: bg, accentColor: accent }));
+      }
+      
+      return {
+        bgColor: bg,
+        accentColor: accent,
+        textColor: getTextColor(bg),
+        overlayColors: getOverlayColors(bg)
+      };
+    }
+    
+    // Se ainda não carregou, usar cores iniciais do localStorage
     return {
-      bgColor: bg,
-      accentColor: accent,
-      textColor: getTextColor(bg), // Calcula automaticamente branco ou preto
-      overlayColors: getOverlayColors(bg) // Calcula todas as variações
+      bgColor: initialColors.bgColor,
+      accentColor: initialColors.accentColor,
+      textColor: getTextColor(initialColors.bgColor),
+      overlayColors: getOverlayColors(initialColors.bgColor)
     };
-  }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode]);
+  }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode, linkId, initialColors]);
 
 
 
@@ -871,7 +957,7 @@ export default function PublicRegister() {
       // Se for cadastro de amigo, não verificar limite de membros
       if (!isFriendRegistration) {
         // Verificar limite de membros apenas para novos membros
-        const limitCheck = await checkMemberLimit();
+        const limitCheck = await checkPlanMemberLimit();
         if (!limitCheck.canRegister) {
           toast({
             title: "Limite de membros atingido",

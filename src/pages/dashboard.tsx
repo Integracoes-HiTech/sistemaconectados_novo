@@ -43,6 +43,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useReports } from "@/hooks/useReports";
 import { useUserLinks } from "@/hooks/useUserLinks";
 import { usePlanos } from "@/hooks/usePlanos";
+import { usePlanFeatures } from "@/hooks/usePlanFeatures";
 import { useMembers } from "@/hooks/useMembers";
 import type { Member } from "@/hooks/useMembers";
 import { useFriendsRanking } from "@/hooks/useFriendsRanking";
@@ -126,6 +127,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports, loading } = useAuth();
+  const { features: planFeatures, loading: planFeaturesLoading } = usePlanFeatures();
 
   // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
@@ -138,11 +140,48 @@ export default function Dashboard() {
   }, [user, loading, navigate]);
 
   // Estado para armazenar cores da campanha do banco
+  // Função para buscar cor inicial da campanha do localStorage
+  const getInitialCampaignColors = (): { background: string; primary: string; secondary: string; } | null => {
+    try {
+      const loggedUser = localStorage.getItem('loggedUser');
+      if (loggedUser) {
+        const userData = JSON.parse(loggedUser);
+        const campaignCode = userData.campaign;
+        
+        // Tentar buscar do localStorage se já foi salvo antes
+        const savedColors = localStorage.getItem(`campaign_colors_${campaignCode}`);
+        if (savedColors) {
+          return JSON.parse(savedColors);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao buscar cores iniciais:', err);
+    }
+    return null;
+  };
+
   const [campaignColors, setCampaignColors] = useState<{
     background: string;
     primary: string;
     secondary: string;
-  } | null>(null);
+  } | null>(getInitialCampaignColors());
+
+  // Buscar dados do usuário do localStorage para exibição imediata
+  const [quickUserData] = useState<{name: string, role: string} | null>(() => {
+    try {
+      const loggedUser = localStorage.getItem('loggedUser');
+      if (loggedUser) {
+        const userData = JSON.parse(loggedUser);
+        return {
+          name: userData.name || userData.display_name || 'Usuário',
+          role: userData.role || 'Membro'
+        };
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados rápidos do usuário:', err);
+    }
+    return null;
+  });
 
   // Buscar cores da campanha do banco
   useEffect(() => {
@@ -163,11 +202,14 @@ export default function Dashboard() {
         }
 
         if (data) {
-          setCampaignColors({
+          const colors = {
             background: data.primary_color,
             primary: data.primary_color,
             secondary: data.secondary_color
-          });
+          };
+          // Salvar no localStorage para próxima vez
+          localStorage.setItem(`campaign_colors_${user.campaign}`, JSON.stringify(colors));
+          setCampaignColors(colors);
         }
       } catch (err) {
         // Silently fail - usar fallback inline
@@ -244,7 +286,9 @@ export default function Dashboard() {
         
         // Refresh automático dos relatórios e estatísticas
         await fetchStats();
-        await fetchReportData();
+        if (planFeatures.canViewReports) {
+          await fetchReportData();
+        }
       } else {
         throw new Error(result.error || 'Erro desconhecido');
       }
@@ -285,7 +329,9 @@ export default function Dashboard() {
         
         // Refresh automático dos relatórios e estatísticas
         await fetchStats();
-        await fetchReportData();
+        if (planFeatures.canViewReports) {
+          await fetchReportData();
+        }
       } else {
         throw new Error(result.error || "Erro desconhecido");
       }
@@ -327,7 +373,9 @@ export default function Dashboard() {
         
         // Refresh automático dos relatórios e estatísticas
         await fetchStats();
-        await fetchReportData();
+        if (planFeatures.canViewReports) {
+          await fetchReportData();
+        }
       } else {
         throw new Error("Erro ao excluir pessoa");
       }
@@ -601,7 +649,10 @@ export default function Dashboard() {
   // Verificar dados carregados
   const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter, user?.campaign);
   const { stats, loading: statsLoading, fetchStats } = useStats(referrerFilter, user?.campaign);
-  const { reportData, loading: reportsLoading, fetchReportData } = useReports(referrerFilter, user?.campaign);
+  const { reportData, loading: reportsLoading, fetchReportData } = useReports(
+    (planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? referrerFilter : undefined, 
+    (planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? user?.campaign : undefined
+  );
   const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter, user?.campaign);
   
   // Novos hooks para o sistema de membros
@@ -616,7 +667,7 @@ export default function Dashboard() {
     getMembersByStatus,
     getMemberRole,
     softDeleteMember
-  } = useMembers(referrerFilter, user?.campaign);
+  } = useMembers(referrerFilter, user?.campaign, planFeatures.maxMembers);
 
   // Hook para ranking de amigos
   const { 
@@ -728,17 +779,43 @@ export default function Dashboard() {
         description: `Link específico para ${user.name} foi copiado para a área de transferência.`,
       });
     } else {
-      toast({
-        title: "Erro ao gerar link",
-        description: 'error' in result ? result.error : "Tente novamente.",
-        variant: "destructive",
-      });
+      // Verificar se é erro de limite atingido
+      if ('error' in result && result.error === 'LIMIT_REACHED') {
+        const limitResult = result as {
+          error: string;
+          limitType?: string;
+          current?: number;
+          max?: number;
+          planName?: string;
+        };
+        
+        const limitTypeText = limitResult.limitType === 'members' ? 'membros' : 'amigos';
+        const current = limitResult.current || 0;
+        const max = limitResult.max || 0;
+        const planName = limitResult.planName || 'atual';
+        
+        toast({
+          title: "⚠️ Limite Atingido",
+          description: `Limite de ${limitTypeText} atingido (${current}/${max}). Faça upgrade do plano ${planName} para continuar cadastrando.`,
+          variant: "destructive",
+          duration: 7000, // Exibir por 7 segundos
+        });
+      } else {
+        toast({
+          title: "Erro ao gerar link",
+          description: 'error' in result ? result.error : "Tente novamente.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
 
   // Filtrar membros baseado na pesquisa e filtros específicos (apenas membros, não amigos)
   const filteredMembers = members.filter(member => {
+    // Filtrar por campanha primeiro
+    if (member.campaign !== user?.campaign) return false;
+    
     // Filtrar apenas membros (não amigos)
     if (member.is_friend) return false;
     
@@ -783,6 +860,9 @@ export default function Dashboard() {
 
   // Filtrar amigos baseado na pesquisa e filtros específicos
   const filteredFriends = friends.filter(friend => {
+    // Filtrar por campanha primeiro
+    if (friend.campaign !== user?.campaign) return false;
+    
     const matchesSearch = friendsSearchTerm === "" || 
       // Campos da primeira pessoa
       friend.name.toLowerCase().includes(friendsSearchTerm.toLowerCase()) ||
@@ -896,7 +976,7 @@ export default function Dashboard() {
 
 
   // Loading state
-  if (usersLoading || statsLoading || reportsLoading || linksLoading || membersLoading || settingsLoading) {
+  if (usersLoading || statsLoading || reportsLoading || linksLoading || membersLoading || settingsLoading || planFeaturesLoading) {
     return (
       <div 
         className="min-h-screen flex items-center justify-center" 
@@ -922,8 +1002,19 @@ export default function Dashboard() {
             <Logo size="md" />
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <span className={`${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'} font-medium`}>Bem-vindo, {user?.name}</span>
-                <div className="text-sm text-muted-foreground">{user?.role}</div>
+                <span className={`${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'} font-medium`}>Bem-vindo, {user?.name || quickUserData?.name || 'Usuário'}</span>
+                <div className="text-sm text-muted-foreground">{user?.role || quickUserData?.role || 'Membro'}</div>
+                {planFeatures.planName && (user?.campaign?.toLowerCase() !== 'hitech' && user?.username?.toLowerCase() !== 'adminhitech' && !planFeatures.planName.toLowerCase().includes('valter') && !planFeatures.planName.toLowerCase().includes('saúde') && !planFeatures.planName.toLowerCase().includes('saude') && user?.campaign?.toLowerCase() !== 'b' && user?.username?.toLowerCase() !== 'admin_b') && (
+                  <div className="text-xs text-muted-foreground">
+                    Plano: {planFeatures.planName}
+                    <span className="ml-1 text-orange-600">
+                      {planFeatures.maxMembers < 999999 && planFeatures.maxFriends < 999999 ? 
+                        `(${planFeatures.maxMembers + planFeatures.maxFriends} cadastros)` :
+                        `(Ilimitado)`
+                      }
+                    </span>
+                  </div>
+                )}
               </div>
               <Button
                 onClick={handleLogout}
@@ -941,7 +1032,28 @@ export default function Dashboard() {
 
       {/* Conteúdo Principal */}
       <main className="container mx-auto px-4 py-8">
-      {/* Header Fixed */}
+        {/* Aviso de Plano Gratuito */}
+        {planFeatures.planName.toLowerCase().includes('gratuito') && (
+          <Card className="mb-6 border-l-4 border-l-orange-500 bg-orange-50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="text-orange-600">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-orange-800">Plano Gratuito Ativo</h3>
+                  <p className="text-sm text-orange-700">
+                    Você está usando o plano gratuito. Funcionalidades limitadas: sem relatórios, sem exportação PDF/EXCEL, sem mapa. Limite: {planFeatures.maxMembers + planFeatures.maxFriends} usuários totais.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Header Fixed */}
       <div className={`bg-white shadow-[var(--shadow-card)] rounded-lg p-6 mb-8 border ${user?.campaign === 'B' ? 'border-institutional-light' : 'border-institutional-light'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -997,7 +1109,7 @@ export default function Dashboard() {
             )}
             
             
-            {isAdminUser && (
+            {isAdminUser && planFeatures.canViewReports && planFeatures.canExport && (
               <Button
                 onClick={() => {
                   try {
@@ -1012,13 +1124,13 @@ export default function Dashboard() {
                     }
 
                     // Verificar se há dados nos relatórios
-                    const hasReportData = (
-                      Object.keys(reportData.usersByLocation).length > 0 ||
-                      Object.keys(reportData.usersByCity).length > 0 ||
-                      Object.keys(reportData.sectorsGroupedByCity).length > 0 ||
-                      reportData.registrationsByDay.length > 0 ||
-                      reportData.usersByStatus.length > 0 ||
-                      reportData.recentActivity.length > 0
+                    const hasReportData = reportData && (
+                      Object.keys(reportData.usersByLocation || {}).length > 0 ||
+                      Object.keys(reportData.usersByCity || {}).length > 0 ||
+                      Object.keys(reportData.sectorsGroupedByCity || {}).length > 0 ||
+                      (reportData.registrationsByDay || []).length > 0 ||
+                      (reportData.usersByStatus || []).length > 0 ||
+                      (reportData.recentActivity || []).length > 0
                     );
 
                     if (!hasReportData) {
@@ -1137,8 +1249,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Mapa Interativo - Apenas Administradores da Campanha B */}
-        {user?.campaign === 'B' && isAdmin() && (
+        {/* Mapa Interativo - Apenas Administradores com Plano Avançado */}
+        {isAdmin() && planFeatures.canViewMap && (
           <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6 overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-institutional-blue">
@@ -1146,13 +1258,13 @@ export default function Dashboard() {
                 Mapa Interativo
               </CardTitle>
               <CardDescription>
-                Visualização geográfica da Campanha B
+                Visualização geográfica dos membros cadastrados
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="w-full h-[600px]">
                 <iframe
-                  src="/mapas/mapa.html"
+                  src={`/mapas/mapa.html?campaign=${user?.campaign}`}
                   title="Mapa Interativo"
                   className="w-full h-full border-0"
                 />
@@ -1197,21 +1309,21 @@ export default function Dashboard() {
                 <p className={`${textColor.replace('800', '700')} text-sm`}>
                   {isExceeded ? (
                     <>
-                      O sistema excedeu o limite de {memberStats?.max_member_limit || 1500} membros. 
+                      O sistema excedeu o limite de {planFeatures.maxMembers} membros. 
                       Atualmente temos {memberStats?.current_member_count || 0} membros cadastrados 
                       ({limitStatus.percentage.toFixed(1)}% do limite).
                       {isAdmin() && " Considere ativar a fase de amigos ou ajustar o limite."}
                     </>
                   ) : isReached ? (
                     <>
-                      O sistema atingiu o limite de {memberStats?.max_member_limit || 1500} membros. 
+                      O sistema atingiu o limite de {planFeatures.maxMembers} membros. 
                       Atualmente temos {memberStats?.current_member_count || 0} membros cadastrados 
                       ({limitStatus.percentage.toFixed(1)}% do limite).
                       {isAdmin() && " Considere ativar a fase de amigos."}
                     </>
                   ) : (
                     <>
-                      O sistema está próximo do limite de {memberStats?.max_member_limit || 1500} membros. 
+                      O sistema está próximo do limite de {planFeatures.maxMembers} membros. 
                       Atualmente temos {memberStats?.current_member_count || 0} membros cadastrados 
                       ({limitStatus.percentage.toFixed(1)}% do limite).
                       {isAdmin() && " Considere ativar a fase de amigos ou ajustar o limite."}
@@ -1227,7 +1339,7 @@ export default function Dashboard() {
   
 
         {/* Gráficos de Estatísticas - Primeira Linha (Apenas Administradores) */}
-        {isAdmin() && (
+        {isAdmin() && planFeatures.canViewReports && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Usuários por Localização */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1245,7 +1357,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={Object.entries(reportData.usersByLocation).map(([location, count]) => ({ location, quantidade: count }))}>
+                <BarChart data={Object.entries(reportData?.usersByLocation || {}).map(([location, count]) => ({ location, quantidade: count }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="location" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
@@ -1269,7 +1381,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4 max-h-80 overflow-y-auto">
-                {Object.entries(reportData.sectorsGroupedByCity)
+                {Object.entries(reportData?.sectorsGroupedByCity || {})
                   .sort(([, a], [, b]) => b.count - a.count)
                   .map(([city, data]) => (
                     <div key={city} className="border-l-4 border-institutional-gold pl-4 py-2 bg-gray-50 rounded-r-lg">
@@ -1298,7 +1410,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                {Object.keys(reportData.sectorsGroupedByCity).length === 0 && (
+                {Object.keys(reportData?.sectorsGroupedByCity || {}).length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <MapPin className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p>Nenhum dado de setores por cidade encontrado</p>
@@ -1311,7 +1423,7 @@ export default function Dashboard() {
         )}
 
         {/* Gráficos de Estatísticas - Segunda Linha (Apenas Administradores) */}
-        {isAdmin() && (
+        {isAdmin() && planFeatures.canViewReports && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Pessoas Cadastradas por Cidade */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1326,7 +1438,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={Object.entries(reportData.usersByCity).map(([city, count]) => ({ city, quantidade: count }))}>
+                <BarChart data={Object.entries(reportData?.usersByCity || {}).map(([city, count]) => ({ city, quantidade: count }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="city" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
@@ -1350,7 +1462,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3 max-h-80 overflow-y-auto">
-                {Object.entries(reportData.usersByCity)
+                {Object.entries(reportData?.usersByCity || {})
                   .sort(([, a], [, b]) => b - a)
                   .map(([city, count]) => (
                     <div key={city} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors">
@@ -1377,7 +1489,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                {Object.keys(reportData.usersByCity).length === 0 && (
+                {Object.keys(reportData?.usersByCity || {}).length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p>Nenhum dado de membros por cidade encontrado</p>
@@ -1389,136 +1501,141 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Gráficos de Estatísticas - Terceira Linha (Apenas Administradores) */}
-        {isAdmin() && (
+        {/* Relatórios Combinados - Cadastros Recentes e Top 5 Membros */}
+        {isAdmin() && (planFeatures.canViewRecentRegistrations || planFeatures.canViewTopMembers) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
-          {/* Gráfico de Linha - Cadastros Recentes */}
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                <TrendingUp className="w-5 h-5" />
-                Cadastros Recentes de Membros
-              </CardTitle>
-              <CardDescription>
-                Últimos 7 dias - {stats.recent_registrations} novos cadastros
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={reportData.registrationsByDay}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="quantidade" fill="#10B981" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Gráfico de Cadastros Recentes - Apenas para planos não gratuitos */}
+            {planFeatures.canViewRecentRegistrations && (
+              <Card className="shadow-[var(--shadow-card)]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                    <TrendingUp className="w-5 h-5" />
+                    Cadastros Recentes de Membros
+                  </CardTitle>
+                  <CardDescription>
+                    Últimos 7 dias - {stats.recent_registrations} novos cadastros
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={reportData?.registrationsByDay || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="quantidade" fill="#D4AF37" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
-          {/* Gráfico de Membro com mais Amigos */}
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                <Users className="w-5 h-5" />
-                Top 5 - Membros
-              </CardTitle>
-              <CardDescription>
-                Ranking dos membros que mais cadastraram amigos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {members.length > 0 ? (
-                (() => {
-                  // Usar dados reais da tabela members (não amigos órfãos)
-                  const activeMembers = members
-                    .filter(member => 
-                      member.status === 'Ativo' && 
-                      !member.deleted_at && 
-                      member.name.toLowerCase() !== 'admin'
-                    )
-                    .sort((a, b) => {
-                      // Primeiro: mais contratos
-                      if (b.contracts_completed !== a.contracts_completed) {
-                        return b.contracts_completed - a.contracts_completed;
+            {/* Top 5 Membros - Apenas para planos Valter e B Luxo */}
+            {planFeatures.canViewTopMembers && (
+              <Card className="shadow-[var(--shadow-card)]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                    <Users className="w-5 h-5" />
+                    Top 5 - Membros
+                  </CardTitle>
+                  <CardDescription>
+                    Ranking dos membros que mais cadastraram amigos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {members.length > 0 ? (
+                    (() => {
+                      // Usar dados reais da tabela members (não amigos órfãos)
+                      const activeMembers = members
+                        .filter(member => 
+                          member.status === 'Ativo' && 
+                          !member.deleted_at && 
+                          member.name.toLowerCase() !== 'admin'
+                        )
+                        .sort((a, b) => {
+                          // Primeiro: mais contratos
+                          if (b.contracts_completed !== a.contracts_completed) {
+                            return b.contracts_completed - a.contracts_completed;
+                          }
+                          // Empate: membro mais antigo primeiro
+                          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                        })
+                        .slice(0, 5)
+                        .map((member, index) => ({ 
+                          position: index + 1, 
+                          member: member.name, 
+                          count: member.contracts_completed 
+                        }));
+
+                      if (activeMembers.length === 0) {
+                        return (
+                          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                            <div className="text-center">
+                              <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                              <p>Nenhum membro com amigos cadastrados</p>
+                            </div>
+                          </div>
+                        );
                       }
-                      // Empate: membro mais antigo primeiro
-                      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                    })
-                    .slice(0, 5)
-                    .map((member, index) => ({ 
-                      position: index + 1, 
-                      member: member.name, 
-                      count: member.contracts_completed 
-                    }));
 
-                  if (activeMembers.length === 0) {
-                    return (
-                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                        <div className="text-center">
-                          <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                          <p>Nenhum membro com amigos cadastrados</p>
+                      return (
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                          {activeMembers.map((item) => (
+                            <div 
+                              key={item.member} 
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`
+                                  flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold
+                                  ${item.position === 1 ? 'bg-yellow-500' : 
+                                    item.position === 2 ? 'bg-gray-400' : 
+                                    item.position === 3 ? 'bg-amber-600' : 
+                                    'bg-institutional-blue'}
+                                `}>
+                                  {item.position}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-gray-800">
+                                    {item.member}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {item.count} amigos cadastrados
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-2xl font-bold text-institutional-blue">
+                                  {item.count}
+                                </div>
+                                {item.position === 1 && (
+                                  <div className="text-xs text-yellow-600 font-medium">
+                                    🏆 Líder
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      <div className="text-center">
+                        <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                        <p>Nenhum amigo cadastrado</p>
                       </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                      {activeMembers.map((item) => (
-                        <div 
-                          key={item.member} 
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`
-                              flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold
-                              ${item.position === 1 ? 'bg-yellow-500' : 
-                                item.position === 2 ? 'bg-gray-400' : 
-                                item.position === 3 ? 'bg-amber-600' : 
-                                'bg-institutional-blue'}
-                            `}>
-                              {item.position}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-gray-800">
-                                {item.member}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {item.count} amigos cadastrados
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-institutional-blue">
-                              {item.count}
-                            </div>
-                            {item.position === 1 && (
-                              <div className="text-xs text-yellow-600 font-medium">
-                                🏆 Líder
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
                     </div>
-                  );
-                })()
-              ) : (
-                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                  <div className="text-center">
-                    <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                    <p>Nenhum amigo cadastrado</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
+
         {/* Novos Reports - Engagement Rate e Registration Count (Apenas Administradores) */}
-        {isAdmin() && (
+        {isAdmin() && planFeatures.canViewReports && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           </div>
         )}
@@ -1541,14 +1658,31 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <h4 className="font-semibold text-blue-800 mb-2">📅 Fase de Amigos</h4>
-                    <p className="text-blue-700 text-sm mb-2">
-                      A fase de amigos será liberada em Breve. 
-                      Cada membro poderá cadastrar 15 duplas de amigos quando ativada.
-                    </p>
-                    <div className="flex items-center gap-2 text-blue-600">
-                      <CalendarDays className="w-4 h-4" />
-                      <span className="text-sm font-medium">Disponível em Breve</span>
-                    </div>
+                    {settings?.member_links_type === 'members' ? (
+                      // Mensagem para quando o tipo de link é "members"
+                      <>
+                        <p className="text-blue-700 text-sm mb-2">
+                          A fase de amigos é liberada pelo Administrador. 
+                          O membro poderá cadastrar duplas de amigos quando ativada.
+                        </p>
+                        <div className="flex items-center gap-2 text-blue-600">
+                         
+                          <span className="text-sm font-medium">Controlado pelo Administrador</span>
+                        </div>
+                      </>
+                    ) : (
+                      // Mensagem original para quando o tipo de link é "friends"
+                      <>
+                        <p className="text-blue-700 text-sm mb-2">
+                          A fase de amigos será liberada em Breve. 
+                          Cada membro poderá cadastrar 15 duplas de amigos quando ativada.
+                        </p>
+                        <div className="flex items-center gap-2 text-blue-600">
+                          <CalendarDays className="w-4 h-4" />
+                          <span className="text-sm font-medium">Disponível em Breve</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                   
                
@@ -1597,75 +1731,80 @@ export default function Dashboard() {
         )}
 
       
-        {/* Cards de Resumo - Sistema de Membros (Apenas Administradores) */}
+        {/* Cards de Resumo - Sistema de Membros */}
         {isAdmin() && (
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className={`text-xl font-semibold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>Resumo do Sistema</h2>
+              
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-          <Card className={`shadow-[var(--shadow-card)] border-l-4 ${user?.campaign === 'B' ? 'border-l-institutional-gold' : 'border-l-institutional-gold'}`}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
-                  <p className={`text-2xl font-bold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>{memberStats?.total_members || 0}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {memberStats?.current_member_count || 0} / {memberStats?.max_member_limit || 1500}
-                  </p>
-                </div>
-                <div className={`p-3 rounded-full ${user?.campaign === 'B' ? 'bg-institutional-light' : 'bg-institutional-light'}`}>
-                  <Users className={`w-6 h-6 ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Membros Verdes</p>
-                  <p className="text-2xl font-bold text-green-600">{memberStats?.green_members || 0}</p>
-                  <p className="text-xs text-green-600">15 contratos completos</p>
-                </div>
-                <div className="p-3 rounded-full bg-green-50">
-                  <div className="text-2xl">🟢</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-yellow-500">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Membros Amarelos</p>
-                  <p className="text-2xl font-bold text-yellow-600">{memberStats?.yellow_members || 0}</p>
-                  <p className="text-xs text-yellow-600">1-14 contratos</p>
-                </div>
-                <div className="p-3 rounded-full bg-yellow-50">
-                  <div className="text-2xl">🟡</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-red-500">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Membros Vermelhos</p>
-                  <p className="text-2xl font-bold text-red-600">{memberStats?.red_members || 0}</p>
-                  <p className="text-xs text-red-600">0 contratos</p>
-                </div>
-                <div className="p-3 rounded-full bg-red-50">
-                  <div className="text-2xl">🔴</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
+                      <p className="text-2xl font-bold text-institutional-blue">{memberStats?.total_members || 0}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {memberStats?.current_member_count || 0} / {planFeatures.maxMembers < 999999 ? planFeatures.maxMembers : '∞'}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-full bg-institutional-light">
+                      <Users className="w-6 h-6 text-institutional-blue" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Cards adicionais para plano Avançado */}
+            {planFeatures.canViewColorCards && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Membros Verdes</p>
+                      <p className="text-2xl font-bold text-green-600">{memberStats?.green_members || 0}</p>
+                      <p className="text-xs text-green-600">15 contratos completos</p>
+                    </div>
+                    <div className="p-3 rounded-full bg-green-50">
+                      <div className="text-2xl">🟢</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-yellow-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Membros Amarelos</p>
+                      <p className="text-2xl font-bold text-yellow-600">{memberStats?.yellow_members || 0}</p>
+                      <p className="text-xs text-yellow-600">1-14 contratos</p>
+                    </div>
+                    <div className="p-3 rounded-full bg-yellow-50">
+                      <div className="text-2xl">🟡</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-red-500">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Membros Vermelhos</p>
+                      <p className="text-2xl font-bold text-red-600">{memberStats?.red_members || 0}</p>
+                      <p className="text-xs text-red-600">0 contratos</p>
+                    </div>
+                    <div className="p-3 rounded-full bg-red-50">
+                      <div className="text-2xl">🔴</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              </div>
+            )}
           </div>
         )}
 
@@ -1700,11 +1839,13 @@ export default function Dashboard() {
             </CardTitle>
             <CardDescription>
               {isAdminUser
-                ? "Ranking completo de todos os membros cadastrados no sistema"
+                ? (planFeatures.planName && (planFeatures.planName.toLowerCase().includes('valter') || planFeatures.planName.toLowerCase().includes('b luxo')))
+                  ? "Ranking completo de todos os membros cadastrados no sistema"
+                  : "Lista completa de todos os membros cadastrados no sistema"
                 : "Seu ranking pessoal e membros vinculados ao seu link"
               }
             </CardDescription>
-            {isAdmin() && (
+            {isAdmin() && planFeatures.canViewReports && planFeatures.canExport && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -1871,14 +2012,20 @@ export default function Dashboard() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-institutional-light">
-                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Posição</th>
+                  {planFeatures.canViewRankingColumns && (
+                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Posição</th>
+                  )}
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Membro e Parceiro</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Instagram</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cidade</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Setor</th>
-                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos</th>
-                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                  {planFeatures.canViewRankingColumns && (
+                    <>
+                      <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos</th>
+                      <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                    </>
+                  )}
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Indicado por</th>
                   {canDeleteUsers() && (
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
@@ -1888,18 +2035,20 @@ export default function Dashboard() {
               <tbody>
                 {paginatedMembers.map((member) => (
                   <tr key={member.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-institutional-blue">
-                          {member.ranking_position || 'N/A'}
-                        </span>
-                        {member.is_top_1500 && (
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                            TOP 1500
+                    {planFeatures.canViewRankingColumns && (
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-institutional-blue">
+                            {member.ranking_position || 'N/A'}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                          {member.is_top_1500 && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                              TOP 1500
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
@@ -1942,26 +2091,30 @@ export default function Dashboard() {
                         <span className="text-sm">{member.sector}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-institutional-blue">
-                          {member.contracts_completed}/15
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{getRankingStatusIcon(member.ranking_status)}</span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRankingStatusColor(member.ranking_status)}`}>
-                          {member.ranking_status}
-                        </span>
-                        {member.can_be_replaced && (
-                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                            SUBSTITUÍVEL
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                    {planFeatures.canViewRankingColumns && (
+                      <>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-institutional-blue">
+                              {member.contracts_completed}/15
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{getRankingStatusIcon(member.ranking_status)}</span>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRankingStatusColor(member.ranking_status)}`}>
+                              {member.ranking_status}
+                            </span>
+                            {member.can_be_replaced && (
+                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                                SUBSTITUÍVEL
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </>
+                    )}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <UserIcon className="w-4 h-4 text-muted-foreground" />
@@ -1999,7 +2152,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mt-6 px-4">
               <div className="text-sm text-muted-foreground">
                 Mostrando {((membersCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(membersCurrentPage * itemsPerPage, filteredMembers.length)} de {filteredMembers.length} membros
-                <span className="ml-2 text-blue-600 font-medium">(Limite máximo: 1.500)</span>
+                <span className="ml-2 text-blue-600 font-medium">(Limite máximo: {planFeatures.maxMembers})</span>
               </div>
               
               <div className="flex items-center gap-2">
@@ -2083,7 +2236,7 @@ export default function Dashboard() {
       </Card>
         )}
 
-        {/* Card de Total de Amigos (Apenas Administradores) */}
+        {/* Card de Total de Amigos */}
         {isAdmin() && (
           <div className="mb-6 mt-8">
            
@@ -2095,7 +2248,7 @@ export default function Dashboard() {
                       <p className="text-sm font-medium text-muted-foreground">Total de Amigos</p>
                       <p className="text-2xl font-bold text-institutional-blue">{friends.length}</p>
                       <p className="text-xs text-muted-foreground">
-                        {friends.length} amigos cadastrados
+                        {friends.length} / {planFeatures.maxFriends < 999999 ? planFeatures.maxFriends : '∞'}
                       </p>
                     </div>
                     <div className="p-3 rounded-full bg-institutional-light">
@@ -2119,6 +2272,7 @@ export default function Dashboard() {
             <CardDescription>
               Lista Completa de todos os amigos cadastrados no sistema
             </CardDescription>
+            {planFeatures.canViewReports && planFeatures.canExport && (
             <div className="flex gap-2 mt-4">
               <Button
                 size="sm"
@@ -2186,6 +2340,7 @@ export default function Dashboard() {
                 Exportar PDF
               </Button>
             </div>
+            )}
           </CardHeader>
           <CardContent>
             {/* Filtros para Amigos */}
@@ -2362,7 +2517,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mt-6 px-4">
                 <div className="text-sm text-muted-foreground">
                   Mostrando {((friendsCurrentPage - 1) * itemsPerPage) + 1} a {Math.min(friendsCurrentPage * itemsPerPage, filteredFriends.length)} de {filteredFriends.length} amigos
-                  <span className="ml-2 text-blue-600 font-medium">(Limite máximo: 22.500)</span>
+                  <span className="ml-2 text-blue-600 font-medium">(Limite máximo: {planFeatures.maxFriends < 999999 ? planFeatures.maxFriends : '∞'})</span>
                 </div>
                 
                 <div className="flex items-center gap-2">
@@ -2494,6 +2649,7 @@ export default function Dashboard() {
             </div>
 
             {/* Botões de Exportação */}
+            {planFeatures.canViewReports && planFeatures.canExport && (
             <div className="mb-4 flex gap-2">
               <Button
                 onClick={() => exportSaudePeopleToExcel()}
@@ -2510,6 +2666,7 @@ export default function Dashboard() {
                 Exportar PDF
               </Button>
             </div>
+            )}
 
             {/* Tabela de Pessoas de Saúde */}
             <div className="overflow-x-auto" id="saude-people-table">

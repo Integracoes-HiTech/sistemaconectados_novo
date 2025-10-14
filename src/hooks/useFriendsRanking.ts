@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface FriendRanking {
@@ -18,8 +18,10 @@ export interface FriendRanking {
   couple_instagram: string;
   couple_city: string;
   couple_sector: string;
+  couple_cep?: string | null;
+  cep?: string | null;
   contracts_completed: number; // Quantos usuários este amigo cadastrou
-  ranking_position: number;
+  ranking_position: number | null;
   ranking_status: 'Verde' | 'Amarelo' | 'Vermelho';
   is_top_1500: boolean;
   can_be_replaced: boolean;
@@ -27,8 +29,10 @@ export interface FriendRanking {
   post_verified_2: boolean;
   post_url_1: string | null;
   post_url_2: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
+  campaign: string;
   // Dados do membro que cadastrou
   member_name: string;
   member_instagram: string;
@@ -42,7 +46,7 @@ export const useFriendsRanking = (campaign?: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFriendsRanking = async () => {
+  const fetchFriendsRanking = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -90,7 +94,7 @@ export const useFriendsRanking = (campaign?: string) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaign]);
 
   const addFriendReferral = async (friendId: string, referralData: {
     name: string;
@@ -268,7 +272,7 @@ export const useFriendsRanking = (campaign?: string) => {
 
   useEffect(() => {
     fetchFriendsRanking();
-  }, [campaign]);
+  }, [campaign, fetchFriendsRanking]);
 
   // Função para excluir amigo (soft delete)
   const softDeleteFriend = async (friendId: string) => {
@@ -419,7 +423,7 @@ export const useFriendsRanking = (campaign?: string) => {
       }
 
       // Atualizar ranking geral
-      await updateRankingAutomatically();
+      await updateAllMembersRanking();
 
     } catch (err) {
       // Erro ao atualizar ranking e status

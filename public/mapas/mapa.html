@@ -11,7 +11,7 @@
       connect-src 'self' https://*.supabase.co https://viacep.com.br https://brasilapi.com.br https://opencep.com https://nominatim.openstreetmap.org;
       frame-ancestors 'self' https://conectadosdigital.com.br http://localhost:*;
     ">
-    <title>Mapa de Membros - Campanha B</title>
+    <title>Mapa de Membros</title>
 
     <!-- Folha de estilo para ocupar toda a tela -->
     <style>
@@ -364,27 +364,67 @@
         return;
       }
 
-      // Buscar membros ativos da campanha B com CEP (principal OU do cônjuge)
-      const { data: membros, error } = await supabase
-        .from('members')
-        .select('id, name, couple_name, cep, couple_cep, city, couple_city, phone, couple_phone, instagram, couple_instagram, status, campaign')
-        .eq('campaign', 'B')
-        .eq('status', 'Ativo')
-        .or('cep.not.is.null,couple_cep.not.is.null');
+      // Obter campanha da URL ou usar 'B' como padrão
+      const urlParams = new URLSearchParams(window.location.search);
+      const campaign = urlParams.get('campaign') || 'B';
 
-      if (error) {
-        loadingDiv.innerHTML = `
-          <p style="color: red; font-weight: bold;">❌ Erro ao carregar dados do mapa</p>
-          <p style="font-size: 12px; color: #666; margin-top: 8px;">${error.message}</p>
-          <p style="font-size: 11px; color: #999; margin-top: 4px;">Verifique sua conexão com a internet</p>
-        `;
-        return;
+      // Buscar membros ativos da campanha específica com CEP (principal OU do cônjuge)
+      // Fazer duas consultas separadas para evitar problemas de sintaxe OR
+      const [result1, result2] = await Promise.all([
+        // Membros com CEP principal
+        supabase
+          .from('members')
+          .select('id, name, couple_name, cep, couple_cep, city, couple_city, phone, couple_phone, instagram, couple_instagram, status, campaign')
+          .eq('campaign', campaign)
+          .eq('status', 'Ativo')
+          .not('cep', 'is', null),
+        
+        // Membros com CEP do cônjuge (mas sem CEP principal)
+        supabase
+          .from('members')
+          .select('id, name, couple_name, cep, couple_cep, city, couple_city, phone, couple_phone, instagram, couple_instagram, status, campaign')
+          .eq('campaign', campaign)
+          .eq('status', 'Ativo')
+          .is('cep', null)
+          .not('couple_cep', 'is', null)
+      ]);
+
+      // Verificar erros
+      if (result1.error) {
+        throw result1.error;
+      }
+      if (result2.error) {
+        throw result2.error;
+      }
+
+      // Combinar resultados e remover duplicatas
+      const membrosComCep = result1.data || [];
+      const membrosComCoupleCep = result2.data || [];
+      
+      // Criar Set de IDs para evitar duplicatas
+      const idsProcessados = new Set();
+      const membros = [];
+      
+      // Adicionar membros com CEP principal
+      for (const membro of membrosComCep) {
+        if (!idsProcessados.has(membro.id)) {
+          membros.push(membro);
+          idsProcessados.add(membro.id);
+        }
+      }
+      
+      // Adicionar membros com apenas CEP do cônjuge
+      for (const membro of membrosComCoupleCep) {
+        if (!idsProcessados.has(membro.id)) {
+          membros.push(membro);
+          idsProcessados.add(membro.id);
+        }
       }
 
       if (!membros || membros.length === 0) {
         loadingDiv.innerHTML = `
           <p style="color: #f59e0b; font-weight: bold;">⚠️ Nenhum membro encontrado</p>
-          <p style="font-size: 12px; color: #666; margin-top: 8px;">Não há membros cadastrados com CEP na Campanha B</p>
+          <p style="font-size: 12px; color: #666; margin-top: 8px;">Não há membros cadastrados com CEP</p>
         `;
         return;
       }

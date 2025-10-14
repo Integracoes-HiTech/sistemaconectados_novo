@@ -296,7 +296,135 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
   // Função para criar link único por usuário
   const createLink = async (userId: string, referrerName: string, expiresAt?: string) => {
     try {
-      // Verificar se já existe um link ativo para este usuário
+      // 1. BUSCAR CAMPANHA E PLANO DO USUÁRIO
+      const { data: userData, error: userError } = await supabase
+        .from('auth_users')
+        .select('campaign')
+        .eq('id', userId)
+        .single()
+
+      if (userError) throw userError
+
+      const userCampaign = userData?.campaign || 'A'
+
+      // Buscar informações do plano da campanha
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('nome_plano, plano_id')
+        .eq('code', userCampaign)
+        .single()
+
+      if (campaignError) {
+        console.error('Erro ao buscar plano da campanha:', campaignError)
+      }
+
+      const planName = campaignData?.nome_plano || 'Profissional'
+      const planNameLower = planName.toLowerCase()
+      const isFreePlan = planNameLower.includes('gratuito')
+      const isEssentialPlan = planNameLower.includes('essencial')
+      const isProfessionalPlan = planNameLower.includes('profissional')
+      const isAdvancedPlan = planNameLower.includes('avançado') || planNameLower.includes('avancado')
+      const isBLuxoPlan = planNameLower.includes('b luxo') || planNameLower.includes('plano b luxo')
+      const isValterPlan = planNameLower.includes('valter')
+      const isHitechPlan = planNameLower.includes('hitech')
+      const isSaudePlan = planNameLower.includes('saúde') || planNameLower.includes('saude')
+
+      // 2. DEFINIR LIMITES BASEADO NO PLANO
+      let maxMembers = 500 // padrão
+      let maxFriends = 999999 // ilimitado padrão
+
+      if (isFreePlan) {
+        maxMembers = 25
+        maxFriends = 25
+      } else if (isEssentialPlan) {
+        maxMembers = 100
+        maxFriends = 100
+      } else if (isProfessionalPlan) {
+        maxMembers = 250
+        maxFriends = 250
+      } else if (isValterPlan || isBLuxoPlan) {
+        maxMembers = 1500
+        maxFriends = 22500
+      } else if (isAdvancedPlan || isHitechPlan || isSaudePlan) {
+        maxMembers = 999999 // Ilimitado
+        maxFriends = 999999 // Ilimitado
+      }
+
+      // 3. BUSCAR CONFIGURAÇÃO DO SISTEMA PARA SABER O TIPO DE LINK
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'member_links_type')
+        .single()
+
+      const linkType = settingsData?.setting_value || 'members'
+
+      // 4. VERIFICAR LIMITES BASEADO NO TIPO DE LINK
+      if (linkType === 'members') {
+        // Contar membros ativos da campanha
+        const { data: membersData, error: membersError } = await supabase
+          .from('members')
+          .select('id')
+          .eq('campaign', userCampaign)
+          .eq('status', 'Ativo')
+          .is('deleted_at', null)
+
+        if (membersError) throw membersError
+
+        const currentMembers = membersData?.length || 0
+
+        console.log('🔍 Verificação de limite de membros:', {
+          currentMembers,
+          maxMembers,
+          planName,
+          canCreate: currentMembers < maxMembers
+        })
+
+        if (currentMembers >= maxMembers) {
+          return {
+            success: false,
+            error: 'LIMIT_REACHED',
+            limitType: 'members',
+            current: currentMembers,
+            max: maxMembers,
+            planName: planName,
+            message: `Limite de membros atingido (${currentMembers}/${maxMembers}). Faça upgrade do seu plano para continuar cadastrando.`
+          }
+        }
+      } else if (linkType === 'friends') {
+        // Contar amigos ativos da campanha
+        const { data: friendsData, error: friendsError } = await supabase
+          .from('friends')
+          .select('id')
+          .eq('campaign', userCampaign)
+          .eq('status', 'Ativo')
+          .is('deleted_at', null)
+
+        if (friendsError) throw friendsError
+
+        const currentFriends = friendsData?.length || 0
+
+        console.log('🔍 Verificação de limite de amigos:', {
+          currentFriends,
+          maxFriends,
+          planName,
+          canCreate: currentFriends < maxFriends
+        })
+
+        if (currentFriends >= maxFriends) {
+          return {
+            success: false,
+            error: 'LIMIT_REACHED',
+            limitType: 'friends',
+            current: currentFriends,
+            max: maxFriends,
+            planName: planName,
+            message: `Limite de amigos atingido (${currentFriends}/${maxFriends}). Faça upgrade do seu plano para continuar cadastrando.`
+          }
+        }
+      }
+
+      // 5. VERIFICAR SE JÁ EXISTE UM LINK ATIVO PARA ESTE USUÁRIO
       const { data: existingLinks, error: fetchError } = await supabase
         .from('user_links')
         .select('*')
@@ -316,7 +444,7 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         }
       }
 
-      // Gerar linkId único baseado nos primeiros 8 caracteres do userId (mais curto)
+      // 6. GERAR LINKID ÚNICO E CRIAR O LINK
       const shortId = userId.substring(0, 8)
       const linkId = `user-${shortId}`
       

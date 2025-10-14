@@ -1617,10 +1617,13 @@
                     planosDisponiveis = [];
                 }
                 
-                // Filtrar planos: remover "Valter" e "Saude"
+                // Filtrar planos: remover "Valter", "Saude", "B Luxo" e "Hitech"
                 planosDisponiveis = planosDisponiveis.filter(plano => {
                     const nomePlano = plano.nome_plano.toLowerCase();
-                    return nomePlano !== 'valter' && nomePlano !== 'saude';
+                    return nomePlano !== 'valter' && 
+                           nomePlano !== 'saude' && 
+                           !nomePlano.includes('b luxo') && 
+                           !nomePlano.includes('hitech');
                 });
                 
                 // Renderizar cards de planos
@@ -1814,16 +1817,36 @@
                     lead_id: leadData.id
                 };
 
-
-                
-                const response = await fetch(N8N_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify(paymentRequest)
-                });
+                // Tentar com diferentes configurações de CORS
+                let response;
+                try {
+                    // Primeira tentativa: modo cors padrão
+                    response = await fetch(N8N_WEBHOOK_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify(paymentRequest)
+                    });
+                } catch (corsError) {
+                    // Segunda tentativa: modo no-cors (se CORS falhar)
+                    console.warn('Tentativa com CORS falhou, tentando no-cors...');
+                    response = await fetch(N8N_WEBHOOK_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(paymentRequest)
+                    });
+                    
+                    // Para no-cors, não podemos ler a resposta
+                    if (response.type === 'opaque') {
+                        throw new Error('Webhook não configurado para CORS. Configure o n8n para aceitar requisições do navegador.');
+                    }
+                }
 
 
                 if (!response.ok) {
@@ -1861,6 +1884,14 @@
                     return {
                         success: false,
                         error: 'Erro de conexão. Verifique sua internet e tente novamente.'
+                    };
+                }
+                
+                // Tratar erros específicos de CORS
+                if (error.message.includes('CORS') || error.message.includes('Access-Control-Allow-Origin') || error.message.includes('blocked by CORS policy')) {
+                    return {
+                        success: false,
+                        error: 'Erro de CORS: Configure o webhook n8n para aceitar requisições do navegador. Veja docs/CONFIGURAR_CORS_N8N.md'
                     };
                 }
                 
@@ -2293,19 +2324,7 @@
         async function createPaidPayment(leadData, planDetails) {
             
             try {
-                // 1. PRIMEIRO: Verificar se o webhook está acessível
-                const webhookCheck = await checkWebhookAccess();
-                
-                if (!webhookCheck.success) {
-                    // Webhook não acessível - não criar lead ainda
-                    return { 
-                        success: false, 
-                        error: 'Serviço de pagamento temporariamente indisponível. Tente novamente em alguns minutos.',
-                        webhookDown: true 
-                    };
-                }
-                
-                // 2. Webhook OK - Salvar lead no banco
+                // 1. Salvar lead no banco (independente do status do webhook)
                 const saveResult = await saveLeadToDatabase(leadData);
                 
                 if (!saveResult.success) {
@@ -2314,7 +2333,7 @@
                 
                 leadId = saveResult.leadId;
                 
-                // 3. Gerar link de pagamento via N8N (enviando o ID do banco)
+                // 2. Gerar link de pagamento via N8N (enviando o ID do banco)
                 const paymentLinkResult = await generatePaymentLinkViaN8n({
                     ...leadData,
                     id: leadId  // ID do banco para o webhook identificar

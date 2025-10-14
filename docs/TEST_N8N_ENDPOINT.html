@@ -62,37 +62,19 @@
         
         <div class="test-section">
             <h3>📡 Configuração do Endpoint</h3>
-            <p><strong>URL:</strong> https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0</p>
-            <button onclick="testConnection()">🔍 Testar Conexão</button>
-            <button onclick="testPaymentData()">💳 Testar Dados de Pagamento</button>
+            <p><strong>URL:</strong> https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0</p>
+            <button onclick="testWebhookTest()">🧪 Testar Webhook</button>
             <button onclick="clearLog()">🗑️ Limpar Log</button>
         </div>
 
         <div class="test-section">
             <h3>📝 Dados de Teste</h3>
             <label>Lead ID:</label>
-            <input type="text" id="leadId" value="test-lead-123" placeholder="ID do lead">
+            <input type="text" id="leadId" value="test-lead-123" placeholder="ID do lead cadastrado no banco">
             
-            <label>Valor:</label>
-            <input type="number" id="amount" value="1250.00" placeholder="Valor do pagamento">
-            
-            <label>Nome:</label>
-            <input type="text" id="payerName" value="João Silva Teste" placeholder="Nome do pagador">
-            
-            <label>Email:</label>
-            <input type="email" id="payerEmail" value="joao@teste.com" placeholder="Email do pagador">
-            
-            <label>Telefone:</label>
-            <input type="text" id="payerPhone" value="5562999999999" placeholder="Telefone">
-            
-            <label>CPF/CNPJ:</label>
-            <input type="text" id="payerDocument" value="12345678901" placeholder="CPF ou CNPJ">
-            
-            <label>Descrição:</label>
-            <input type="text" id="description" value="Plano Profissional - CONECTADOS" placeholder="Descrição">
-            
-            <label>Nome do Plano:</label>
-            <input type="text" id="planName" value="profissional" placeholder="Nome do plano">
+            <p style="color: #666; font-size: 14px; margin-top: 10px;">
+                ℹ️ <strong>Importante:</strong> O webhook N8N deve buscar os dados completos do lead no banco usando este ID.
+            </p>
         </div>
 
         <div class="test-section">
@@ -108,6 +90,7 @@
 
     <script>
         const N8N_WEBHOOK_URL = 'https://n8n.admin.hitechdesenvolvimento.com.br/webhook/554ce0ca-4b36-4d56-a2ce-79d874533ca0';
+        const N8N_WEBHOOK_TEST_URL = 'https://n8n.admin.hitechdesenvolvimento.com.br/webhook-test/554ce0ca-4b36-4d56-a2ce-79d874533ca0';
         let testLog = [];
 
         function log(message) {
@@ -160,20 +143,13 @@
         }
 
         async function testPaymentData() {
-            log('💳 Testando envio de dados de pagamento...');
+            log('💳 Testando envio de lead_id para N8N...');
             
             const testData = {
-                lead_id: document.getElementById('leadId').value,
-                amount: parseFloat(document.getElementById('amount').value),
-                payer_name: document.getElementById('payerName').value,
-                payer_email: document.getElementById('payerEmail').value,
-                payer_phone: document.getElementById('payerPhone').value,
-                payer_document: document.getElementById('payerDocument').value,
-                description: document.getElementById('description').value,
-                plan_name: document.getElementById('planName').value
+                lead_id: document.getElementById('leadId').value
             };
 
-            log('📤 Dados enviados:');
+            log('📤 Dados enviados (apenas lead_id):');
             log(JSON.stringify(testData, null, 2));
 
             try {
@@ -214,10 +190,52 @@
             }
         }
 
+        async function testWebhookTest() {
+            log('🧪 Testando webhook de teste...');
+            
+            const testData = {
+                lead_id: document.getElementById('leadId').value
+            };
+
+            log('📤 Dados enviados para webhook-test:');
+            log(JSON.stringify(testData, null, 2));
+
+            try {
+                const response = await fetch(N8N_WEBHOOK_TEST_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                log(`📡 Status: ${response.status} ${response.statusText}`);
+                log(`✅ OK: ${response.ok}`);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log('✅ Webhook de teste funcionando!');
+                    log('📥 Resposta:');
+                    log(JSON.stringify(data, null, 2));
+                    
+                    document.getElementById('responseData').textContent = JSON.stringify(data, null, 2);
+                } else {
+                    log(`❌ Erro no webhook de teste: ${response.status}`);
+                    const errorText = await response.text();
+                    log(`❌ Erro: ${errorText}`);
+                    document.getElementById('responseData').textContent = errorText;
+                }
+            } catch (error) {
+                log(`❌ Erro de rede: ${error.message}`);
+                document.getElementById('responseData').textContent = `Erro: ${error.message}`;
+            }
+        }
+
         // Testar automaticamente ao carregar
         document.addEventListener('DOMContentLoaded', function() {
             log('🚀 Página de teste carregada');
-            log(`🎯 Endpoint: ${N8N_WEBHOOK_URL}`);
+            log(`🧪 Endpoint Test: ${N8N_WEBHOOK_TEST_URL}`);
         });
     </script>
 </body>
