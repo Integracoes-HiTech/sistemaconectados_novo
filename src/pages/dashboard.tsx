@@ -128,6 +128,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports, loading } = useAuth();
   const { features: planFeatures, loading: planFeaturesLoading } = usePlanFeatures();
+  
+  // Função para verificar se usuário tem plano Saúde
+  const isSaudePlan = () => {
+    return planFeatures.planName && (
+      planFeatures.planName.toLowerCase().includes('saúde') || 
+      planFeatures.planName.toLowerCase().includes('saude')
+    );
+  };
 
   // Proteção de rota - redirecionar para login se não estiver autenticado (após carregamento)
   useEffect(() => {
@@ -345,12 +353,12 @@ export default function Dashboard() {
     }
   };
 
-  // Função para remover pessoa de saúde (soft delete - admin3)
+  // Função para remover pessoa de saúde (soft delete - admin3 e plano Saúde)
   const handleRemoveSaudePerson = async (personId: string, personName: string) => {
-    if (!isAdmin3()) {
+    if (!isAdmin3() && !isSaudePlan()) {
       toast({
         title: "Acesso negado",
-        description: "Apenas admin3 pode remover pessoas.",
+        description: "Apenas admin3 ou usuários com plano Saúde podem remover pessoas.",
         variant: "destructive",
       });
       return;
@@ -390,10 +398,10 @@ export default function Dashboard() {
 
   // Função para editar pessoa de saúde - navega para PublicRegisterSaude com dados
   const handleEditSaudePerson = (person: SaudePerson) => {
-    if (!isAdmin3()) {
+    if (!isAdmin3() && !isSaudePlan()) {
       toast({
         title: "Acesso negado",
-        description: "Apenas admin3 pode editar pessoas.",
+        description: "Apenas admin3 ou usuários com plano Saúde podem editar pessoas.",
         variant: "destructive",
       });
       return;
@@ -703,13 +711,13 @@ export default function Dashboard() {
     updateMemberLinksType
   } = useSystemSettings();
 
-  // Hook para pessoas da campanha de saúde (sempre chamar, mas só usar se admin3)
+  // Hook para pessoas da campanha de saúde (sempre chamar, mas só usar se admin3 ou plano Saúde)
   const { 
     people: saudePeople, 
     loading: saudePeopleLoading,
     softDeletePerson: softDeleteSaudePerson,
     updateSaudePerson
-  } = useSaudePeople();
+  } = useSaudePeople(user?.campaign);
 
   // Hooks para AdminHitech - Campanhas e Admins
   const {
@@ -799,13 +807,13 @@ export default function Dashboard() {
           description: `Limite de ${limitTypeText} atingido (${current}/${max}). Faça upgrade do plano ${planName} para continuar cadastrando.`,
           variant: "destructive",
           duration: 7000, // Exibir por 7 segundos
-        });
-      } else {
-        toast({
-          title: "Erro ao gerar link",
-          description: 'error' in result ? result.error : "Tente novamente.",
-          variant: "destructive",
-        });
+      });
+    } else {
+      toast({
+        title: "Erro ao gerar link",
+        description: 'error' in result ? result.error : "Tente novamente.",
+        variant: "destructive",
+      });
       }
     }
   };
@@ -1053,14 +1061,14 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Header Fixed */}
-      <div className={`bg-white shadow-[var(--shadow-card)] rounded-lg p-6 mb-8 border ${user?.campaign === 'B' ? 'border-institutional-light' : 'border-institutional-light'}`}>
+      {/* Header Fixed */}
+      <div className={`bg-white shadow-[var(--shadow-card)] rounded-lg p-6 mb-4 border ${user?.campaign === 'B' ? 'border-institutional-light' : 'border-institutional-light'}`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className={`text-2xl font-bold ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
               {isAdminHitech() 
                 ? 'Hitech - Sistema de Gestão Conectados' 
-                : isAdmin3() 
+                : (isAdmin3() || isSaudePlan())
                 ? 'Dashboard - Sistema Conectados' 
                 : 'Dashboard - Sistema de Gestão Conectados'}
                 {isAdmin() && (
@@ -1074,8 +1082,8 @@ export default function Dashboard() {
             <p className="text-muted-foreground mt-1">
                 {isAdminHitech()
                 ? "Gerencie o sistema e suas funcionalidades"
-                : isAdmin3()
-                ? "Gerencie sua rede de pessoas da saúde"
+                : (isAdmin3() || isSaudePlan())
+                ? "Gerencie sua rede de pessoas"
                 : isAdminUser
                 ? "Visão geral completa do sistema - Todos os usuários e dados consolidados"
                 : "Gerencie sua rede de membros e acompanhe resultados"
@@ -1084,11 +1092,12 @@ export default function Dashboard() {
           </div>
           
 
-            {isAdmin3() && (
+            {(isAdmin3() || isSaudePlan()) && (
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
-              onClick={() => navigate('/cadastro-saude')}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium"
+              onClick={() => navigate('/cadastro-saude', { state: { campaign: user?.campaign } })}
+              className="text-white font-medium"
+              style={{ backgroundColor: '#CFBA7F' }}
             >
               <User className="w-4 h-4 mr-2" />
               Cadastrar Nova Pessoa
@@ -1096,7 +1105,7 @@ export default function Dashboard() {
           </div>
             )}
             
-            {(canGenerateLinks() || isAdminUser) && !isAdmin3() && !isAdminHitech() && (
+            {(canGenerateLinks() || isAdminUser) && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && (
           <div className="flex flex-col sm:flex-row gap-3">
             {canGenerateLinks() && (
             <Button
@@ -1198,7 +1207,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {userLink && (
+        {userLink && !isSaudePlan() && (
           <div className="mt-4 p-3 bg-institutional-light rounded-lg border border-institutional-gold/30">
             <p className="text-sm text-institutional-blue font-medium mb-1">
               {isAdminUser ? 'Link para cadastro de Membro:' : 'Seu link único:'}
@@ -1208,8 +1217,8 @@ export default function Dashboard() {
         )}
       </div>
 
-        {/* Controle de Tipo de Links - Apenas Administradores */}
-        {isAdmin() && (
+        {/* Controle de Tipo de Links - Apenas Administradores (exceto plano Saúde) */}
+        {isAdmin() && !isSaudePlan() && (
           <Card className={`shadow-[var(--shadow-card)] border-l-4 ${user?.campaign === 'B' ? 'border-l-blue-500' : 'border-l-blue-500'} mb-6`}>
             <CardHeader>
               <CardTitle className={`flex items-center gap-2 ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
@@ -1338,8 +1347,8 @@ export default function Dashboard() {
 
   
 
-        {/* Gráficos de Estatísticas - Primeira Linha (Apenas Administradores) */}
-        {isAdmin() && planFeatures.canViewReports && (
+        {/* Gráficos de Estatísticas - Primeira Linha (Apenas Administradores, exceto plano Saúde) */}
+        {isAdmin() && planFeatures.canViewReports && !isSaudePlan() && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Usuários por Localização */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1422,8 +1431,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Gráficos de Estatísticas - Segunda Linha (Apenas Administradores) */}
-        {isAdmin() && planFeatures.canViewReports && (
+        {/* Gráficos de Estatísticas - Segunda Linha (Apenas Administradores, exceto plano Saúde) */}
+        {isAdmin() && planFeatures.canViewReports && !isSaudePlan() && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Pessoas Cadastradas por Cidade */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1501,50 +1510,50 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Relatórios Combinados - Cadastros Recentes e Top 5 Membros */}
-        {isAdmin() && (planFeatures.canViewRecentRegistrations || planFeatures.canViewTopMembers) && (
+        {/* Relatórios Combinados - Cadastros Recentes e Top 5 Membros (exceto plano Saúde) */}
+        {isAdmin() && (planFeatures.canViewRecentRegistrations || planFeatures.canViewTopMembers) && !isSaudePlan() && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
             {/* Gráfico de Cadastros Recentes - Apenas para planos não gratuitos */}
             {planFeatures.canViewRecentRegistrations && (
-              <Card className="shadow-[var(--shadow-card)]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                    <TrendingUp className="w-5 h-5" />
-                    Cadastros Recentes de Membros
-                  </CardTitle>
-                  <CardDescription>
-                    Últimos 7 dias - {stats.recent_registrations} novos cadastros
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <TrendingUp className="w-5 h-5" />
+                Cadastros Recentes de Membros
+              </CardTitle>
+              <CardDescription>
+                Últimos 7 dias - {stats.recent_registrations} novos cadastros
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={reportData?.registrationsByDay || []}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
                       <Bar dataKey="quantidade" fill="#D4AF37" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
             )}
 
             {/* Top 5 Membros - Apenas para planos Valter e B Luxo */}
             {planFeatures.canViewTopMembers && (
-              <Card className="shadow-[var(--shadow-card)]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
-                    <Users className="w-5 h-5" />
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <Users className="w-5 h-5" />
                     Top 5 - Membros
-                  </CardTitle>
-                  <CardDescription>
-                    Ranking dos membros que mais cadastraram amigos
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+              </CardTitle>
+              <CardDescription>
+                Ranking dos membros que mais cadastraram amigos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
                   {members.length > 0 ? (
-                    (() => {
+                (() => {
                       // Usar dados reais da tabela members (não amigos órfãos)
                       const activeMembers = members
                         .filter(member => 
@@ -1560,75 +1569,75 @@ export default function Dashboard() {
                           // Empate: membro mais antigo primeiro
                           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
                         })
-                        .slice(0, 5)
+                    .slice(0, 5)
                         .map((member, index) => ({ 
-                          position: index + 1, 
+                      position: index + 1, 
                           member: member.name, 
                           count: member.contracts_completed 
-                        }));
+                    }));
 
                       if (activeMembers.length === 0) {
-                        return (
-                          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                            <div className="text-center">
-                              <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                              <p>Nenhum membro com amigos cadastrados</p>
+                    return (
+                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <div className="text-center">
+                          <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                          <p>Nenhum membro com amigos cadastrados</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                          {activeMembers.map((item) => (
+                        <div 
+                          key={item.member} 
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`
+                              flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold
+                              ${item.position === 1 ? 'bg-yellow-500' : 
+                                item.position === 2 ? 'bg-gray-400' : 
+                                item.position === 3 ? 'bg-amber-600' : 
+                                'bg-institutional-blue'}
+                            `}>
+                              {item.position}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-gray-800">
+                                {item.member}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {item.count} amigos cadastrados
+                              </div>
                             </div>
                           </div>
-                        );
-                      }
-
-                      return (
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                          {activeMembers.map((item) => (
-                            <div 
-                              key={item.member} 
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-institutional-light transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`
-                                  flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold
-                                  ${item.position === 1 ? 'bg-yellow-500' : 
-                                    item.position === 2 ? 'bg-gray-400' : 
-                                    item.position === 3 ? 'bg-amber-600' : 
-                                    'bg-institutional-blue'}
-                                `}>
-                                  {item.position}
-                                </div>
-                                <div>
-                                  <div className="font-semibold text-gray-800">
-                                    {item.member}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {item.count} amigos cadastrados
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-2xl font-bold text-institutional-blue">
-                                  {item.count}
-                                </div>
-                                {item.position === 1 && (
-                                  <div className="text-xs text-yellow-600 font-medium">
-                                    🏆 Líder
-                                  </div>
-                                )}
-                              </div>
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-institutional-blue">
+                              {item.count}
                             </div>
-                          ))}
+                            {item.position === 1 && (
+                              <div className="text-xs text-yellow-600 font-medium">
+                                🏆 Líder
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      <div className="text-center">
-                        <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                        <p>Nenhum amigo cadastrado</p>
-                      </div>
+                      ))}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  );
+                })()
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="text-center">
+                    <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                    <p>Nenhum amigo cadastrado</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
             )}
           </div>
         )}
@@ -1640,8 +1649,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção para Membros Não-Administradores (exceto admin3 e AdminHitech) */}
-        {!isAdmin() && !isAdmin3() && !isAdminHitech() && settings?.member_links_type === 'members' && (
+        {/* Seção para Membros Não-Administradores (exceto admin3, AdminHitech e plano Saúde) */}
+        {!isAdmin() && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && settings?.member_links_type === 'members' && (
           <div className="mb-8">
             {/* Informações sobre Amigos */}
             <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6">
@@ -1661,7 +1670,7 @@ export default function Dashboard() {
                     {settings?.member_links_type === 'members' ? (
                       // Mensagem para quando o tipo de link é "members"
                       <>
-                        <p className="text-blue-700 text-sm mb-2">
+                    <p className="text-blue-700 text-sm mb-2">
                           A fase de amigos é liberada pelo Administrador. 
                           O membro poderá cadastrar duplas de amigos quando ativada.
                         </p>
@@ -1676,11 +1685,11 @@ export default function Dashboard() {
                         <p className="text-blue-700 text-sm mb-2">
                           A fase de amigos será liberada em Breve. 
                           Cada membro poderá cadastrar 15 duplas de amigos quando ativada.
-                        </p>
-                        <div className="flex items-center gap-2 text-blue-600">
-                          <CalendarDays className="w-4 h-4" />
+                    </p>
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <CalendarDays className="w-4 h-4" />
                           <span className="text-sm font-medium">Disponível em Breve</span>
-                        </div>
+                    </div>
                       </>
                     )}
                   </div>
@@ -1731,86 +1740,86 @@ export default function Dashboard() {
         )}
 
       
-        {/* Cards de Resumo - Sistema de Membros */}
-        {isAdmin() && (
+        {/* Cards de Resumo - Sistema de Membros (exceto plano Saúde) */}
+        {isAdmin() && !isSaudePlan() && (
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
               
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
-                      <p className="text-2xl font-bold text-institutional-blue">{memberStats?.total_members || 0}</p>
-                      <p className="text-xs text-muted-foreground">
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
+                  <p className="text-2xl font-bold text-institutional-blue">{memberStats?.total_members || 0}</p>
+                  <p className="text-xs text-muted-foreground">
                         {memberStats?.current_member_count || 0} / {planFeatures.maxMembers < 999999 ? planFeatures.maxMembers : '∞'}
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-full bg-institutional-light">
-                      <Users className="w-6 h-6 text-institutional-blue" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </p>
+                </div>
+                <div className="p-3 rounded-full bg-institutional-light">
+                  <Users className="w-6 h-6 text-institutional-blue" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
             </div>
 
-            {/* Cards adicionais para plano Avançado */}
-            {planFeatures.canViewColorCards && (
+            {/* Cards adicionais para plano Avançado (exceto plano Saúde) */}
+            {planFeatures.canViewColorCards && !isSaudePlan() && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Membros Verdes</p>
-                      <p className="text-2xl font-bold text-green-600">{memberStats?.green_members || 0}</p>
-                      <p className="text-xs text-green-600">15 contratos completos</p>
-                    </div>
-                    <div className="p-3 rounded-full bg-green-50">
-                      <div className="text-2xl">🟢</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-yellow-500">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Membros Amarelos</p>
-                      <p className="text-2xl font-bold text-yellow-600">{memberStats?.yellow_members || 0}</p>
-                      <p className="text-xs text-yellow-600">1-14 contratos</p>
-                    </div>
-                    <div className="p-3 rounded-full bg-yellow-50">
-                      <div className="text-2xl">🟡</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-red-500">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Membros Vermelhos</p>
-                      <p className="text-2xl font-bold text-red-600">{memberStats?.red_members || 0}</p>
-                      <p className="text-xs text-red-600">0 contratos</p>
-                    </div>
-                    <div className="p-3 rounded-full bg-red-50">
-                      <div className="text-2xl">🔴</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Membros Verdes</p>
+                  <p className="text-2xl font-bold text-green-600">{memberStats?.green_members || 0}</p>
+                  <p className="text-xs text-green-600">15 contratos completos</p>
+                </div>
+                <div className="p-3 rounded-full bg-green-50">
+                  <div className="text-2xl">🟢</div>
+                </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-yellow-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Membros Amarelos</p>
+                  <p className="text-2xl font-bold text-yellow-600">{memberStats?.yellow_members || 0}</p>
+                  <p className="text-xs text-yellow-600">1-14 contratos</p>
+                </div>
+                <div className="p-3 rounded-full bg-yellow-50">
+                  <div className="text-2xl">🟡</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-red-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Membros Vermelhos</p>
+                  <p className="text-2xl font-bold text-red-600">{memberStats?.red_members || 0}</p>
+                  <p className="text-xs text-red-600">0 contratos</p>
+                </div>
+                <div className="p-3 rounded-full bg-red-50">
+                  <div className="text-2xl">🔴</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+            </div>
             )}
           </div>
         )}
 
 
-        {/* Cards de Amigos (se a fase estiver ativa) - Apenas Administradores */}
-        {isAdmin() && settings?.paid_contracts_phase_active && (
+        {/* Cards de Amigos (se a fase estiver ativa) - Apenas Administradores (exceto plano Saúde) */}
+        {isAdmin() && settings?.paid_contracts_phase_active && !isSaudePlan() && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500">
               <CardContent className="p-6">
@@ -1829,8 +1838,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção de Ranking de Membros (Apenas Administradores) */}
-        {isAdmin() && (
+        {/* Seção de Ranking de Membros (Apenas Administradores, exceto plano Saúde) */}
+        {isAdmin() && !isSaudePlan() && (
         <Card className="shadow-[var(--shadow-card)] mt-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
@@ -1840,7 +1849,7 @@ export default function Dashboard() {
             <CardDescription>
               {isAdminUser
                 ? (planFeatures.planName && (planFeatures.planName.toLowerCase().includes('valter') || planFeatures.planName.toLowerCase().includes('b luxo')))
-                  ? "Ranking completo de todos os membros cadastrados no sistema"
+                ? "Ranking completo de todos os membros cadastrados no sistema"
                   : "Lista completa de todos os membros cadastrados no sistema"
                 : "Seu ranking pessoal e membros vinculados ao seu link"
               }
@@ -2013,7 +2022,7 @@ export default function Dashboard() {
               <thead>
                 <tr className="border-b border-institutional-light">
                   {planFeatures.canViewRankingColumns && (
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Posição</th>
+                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Posição</th>
                   )}
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Membro e Parceiro</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">WhatsApp</th>
@@ -2022,8 +2031,8 @@ export default function Dashboard() {
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Setor</th>
                   {planFeatures.canViewRankingColumns && (
                     <>
-                      <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos</th>
-                      <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos</th>
+                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
                     </>
                   )}
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Indicado por</th>
@@ -2036,18 +2045,18 @@ export default function Dashboard() {
                 {paginatedMembers.map((member) => (
                   <tr key={member.id} className="border-b border-institutional-light/50 hover:bg-institutional-light/30 transition-colors">
                     {planFeatures.canViewRankingColumns && (
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-institutional-blue">
-                            {member.ranking_position || 'N/A'}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-institutional-blue">
+                          {member.ranking_position || 'N/A'}
+                        </span>
+                        {member.is_top_1500 && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            TOP 1500
                           </span>
-                          {member.is_top_1500 && (
-                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                              TOP 1500
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                        )}
+                      </div>
+                    </td>
                     )}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
@@ -2093,26 +2102,26 @@ export default function Dashboard() {
                     </td>
                     {planFeatures.canViewRankingColumns && (
                       <>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-institutional-blue">
-                              {member.contracts_completed}/15
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{getRankingStatusIcon(member.ranking_status)}</span>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRankingStatusColor(member.ranking_status)}`}>
-                              {member.ranking_status}
-                            </span>
-                            {member.can_be_replaced && (
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                                SUBSTITUÍVEL
-                              </span>
-                            )}
-                          </div>
-                        </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-institutional-blue">
+                          {member.contracts_completed}/15
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{getRankingStatusIcon(member.ranking_status)}</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRankingStatusColor(member.ranking_status)}`}>
+                          {member.ranking_status}
+                        </span>
+                        {member.can_be_replaced && (
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                            SUBSTITUÍVEL
+                          </span>
+                        )}
+                      </div>
+                    </td>
                       </>
                     )}
                     <td className="py-3 px-4">
@@ -2236,8 +2245,8 @@ export default function Dashboard() {
       </Card>
         )}
 
-        {/* Card de Total de Amigos */}
-        {isAdmin() && (
+        {/* Card de Total de Amigos (exceto plano Saúde) */}
+        {isAdmin() && !isSaudePlan() && (
           <div className="mb-6 mt-8">
            
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
@@ -2261,8 +2270,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção de Ranking de Amigos (Apenas Administradores) */}
-        {isAdmin() && (
+        {/* Seção de Ranking de Amigos (Apenas Administradores, exceto plano Saúde) */}
+        {isAdmin() && !isSaudePlan() && (
         <Card className="shadow-[var(--shadow-card)] mt-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
@@ -2591,15 +2600,15 @@ export default function Dashboard() {
         )}
 
         {/* Seção de Pessoas de Saúde - Admin3 */}
-        {isAdmin3() && (
-        <Card className="shadow-[var(--shadow-card)] mt-8">
+        {(isAdmin3() || isSaudePlan()) && (
+        <Card className="shadow-[var(--shadow-card)] mt-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
               <User className="w-5 h-5" />
               Pessoas Cadastradas
             </CardTitle>
             <CardDescription>
-              Lista completa de todas as pessoas cadastradas da saúde
+              Lista completa de todas as pessoas cadastradas
             </CardDescription>
           </CardHeader>
           <CardContent>

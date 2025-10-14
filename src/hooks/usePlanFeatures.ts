@@ -68,6 +68,7 @@ export function usePlanFeatures() {
         const isProfessionalPlan = planNameLower.includes('profissional');
         const isBLuxoPlan = planNameLower.includes('b luxo') || planNameLower.includes('plano b luxo');
         const isValterPlan = planNameLower.includes('valter');
+        const isSaudePlan = planNameLower.includes('saúde') || planNameLower.includes('saude');
         
         // 🚀 OTIMIZAÇÃO: Calcular features básicas IMEDIATAMENTE sem esperar plano_id
         const basicFeatures: PlanFeatures = {
@@ -81,8 +82,8 @@ export function usePlanFeatures() {
           canViewTopMembers: isValterPlan || isBLuxoPlan,
           canViewColorCards: isBLuxoPlan || isValterPlan,
           canViewRankingColumns: isBLuxoPlan || isValterPlan,
-          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 1500 : (isBLuxoPlan ? 1500 : ((isAdvancedPlan) ? 999999 : 500))))),
-          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 22500 : (isBLuxoPlan ? 22500 : 999999)))),
+          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 1500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 1500 : ((isAdvancedPlan) ? 999999 : 500)))))),
+          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 22500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 22500 : 999999))))),
           planName,
           planId: campaignData.plano_id
         };
@@ -100,7 +101,8 @@ export function usePlanFeatures() {
           isProfessionalPlan,
           isAdvancedPlan,
           isBLuxoPlan,
-          isValterPlan
+          isValterPlan,
+          isSaudePlan
         });
         
         // 🚀 OTIMIZAÇÃO: Buscar detalhes do plano em background (se necessário)

@@ -836,7 +836,7 @@ export const useExportReports = () => {
       pdf.setFontSize(16)
       pdf.setFont('helvetica', 'bold')
       pdf.setTextColor(0, 0, 0)
-      pdf.text('Relatório Completo - Saúde', 20, 15)
+      pdf.text('Relatório Completo', 20, 15)
       
       // Data de geração e total
       pdf.setFontSize(10)

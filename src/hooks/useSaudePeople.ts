@@ -24,9 +24,10 @@ export interface NewSaudePerson {
   cep?: string;
   cidade?: string;
   observacoes: string;
+  campaign?: string;
 }
 
-export const useSaudePeople = () => {
+export const useSaudePeople = (campaignCode?: string) => {
   const [people, setPeople] = useState<SaudePerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +38,17 @@ export const useSaudePeople = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('saude_people')
         .select('*')
-        .is('deleted_at', null)
+        .is('deleted_at', null);
+
+      // Filtrar por campanha se especificada
+      if (campaignCode) {
+        query = query.eq('campaign', campaignCode);
+      }
+
+      const { data, error: fetchError } = await query
         .order('created_at', { ascending: false });
 
       if (fetchError) {
@@ -73,6 +81,7 @@ export const useSaudePeople = () => {
             cep: personData.cep || null,
             cidade: personData.cidade || null,
             observacoes: personData.observacoes,
+            campaign: personData.campaign || campaignCode
           }
         ])
         .select()
@@ -221,7 +230,7 @@ export const useSaudePeople = () => {
   useEffect(() => {
     fetchSaudePeople();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [campaignCode]);
 
   return {
     people,

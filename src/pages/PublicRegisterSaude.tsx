@@ -15,7 +15,7 @@ import type { SaudePerson } from "@/hooks/useSaudePeople";
 export default function PublicRegisterSaude() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { editMode, personData } = (location.state as { editMode?: boolean; personData?: SaudePerson }) || {};
+  const { editMode, personData, campaign } = (location.state as { editMode?: boolean; personData?: SaudePerson; campaign?: string }) || {};
   
   // Proteção de rota - apenas admin3 pode acessar
   const { user, isAdmin3, loading: authLoading } = useAuth();
@@ -47,17 +47,25 @@ export default function PublicRegisterSaude() {
   const [isLoading, setIsLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
-  const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople();
+  const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople(user?.campaign);
   const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
   
-  // Buscar cores da campanha "saude" com memoização
+  // Buscar cores da campanha específica do usuário com memoização
   const { bgColor, accentColor } = useMemo(() => {
-    const saudeCampaign = getCampaignByCode('saude');
+    // Usar a campanha passada via state ou a campanha do usuário
+    const campaignCode = campaign || user?.campaign || 'saude';
+    const userCampaign = getCampaignByCode(campaignCode);
+    
+    console.log('🎨 PublicRegisterSaude - Campanha:', campaignCode, 'Cores:', {
+      primary: userCampaign?.primary_color,
+      secondary: userCampaign?.secondary_color
+    });
+    
     return {
-      bgColor: saudeCampaign?.primary_color || '#14446C',
-      accentColor: saudeCampaign?.secondary_color || '#D4AF37'
+      bgColor: userCampaign?.primary_color || '#14446C',
+      accentColor: userCampaign?.secondary_color || '#D4AF37'
     };
-  }, [getCampaignByCode]);
+  }, [getCampaignByCode, campaign, user?.campaign]);
 
   // Carregar dados para edição
   useEffect(() => {
@@ -315,6 +323,7 @@ export default function PublicRegisterSaude() {
           cep: formData.cep || undefined,
           cidade: formData.cidade || undefined,
           observacoes: formData.observacoes,
+          campaign: campaign || user?.campaign
         });
 
         toast({
@@ -356,9 +365,8 @@ export default function PublicRegisterSaude() {
       <div className="fixed top-4 left-4 z-50">
         <Button
           onClick={() => navigate("/dashboard")}
-          variant="ghost"
-          className="text-white hover:bg-white/10"
-          style={{ color: 'white', '&:hover': { color: accentColor } } as React.CSSProperties}
+          variant="outline"
+          className="bg-[#CFBA7F] hover:bg-[#CFBA7F]/90 text-white border-none font-medium"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar ao Dashboard
@@ -373,10 +381,10 @@ export default function PublicRegisterSaude() {
       {/* Informação do Cadastro */}
       <div className="mb-6 text-center">
         <h1 className="text-2xl font-bold text-white mb-2">
-          {editMode ? "Editar Pessoa Saúde" : "Cadastrar Nova Pessoa Saúde"}
+          {editMode ? "Editar Pessoa Saúde" : "Cadastrar Nova Pessoa"}
         </h1>
         <p className="text-gray-300">
-          Sistema de Gestão de Pessoas da Saúde
+          Sistema de Gestão de Pessoas
         </p>
       </div>
 
