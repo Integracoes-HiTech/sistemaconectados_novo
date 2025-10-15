@@ -1680,12 +1680,17 @@ export default function Dashboard() {
                         }
                       </p>
                       <div className="bg-white p-3 rounded border border-green-300">
-                        <p className="text-xs text-green-600 font-medium mb-1">Seu link:</p>
-                        <code className="text-xs break-all text-gray-700 bg-gray-50 p-2 rounded block">{userLink}</code>
-                        <div className="mt-2 text-center">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {settings?.member_links_type === 'members' ? '👥 Membros' : '👫 Amigos'}
-                          </span>
+                        <div className="text-center">
+                          <h4 className="font-semibold text-gray-800 mb-2">Status Atual</h4>
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span className="text-sm text-gray-700">
+                              {settings?.member_links_type === 'members' 
+                                ? 'Links servem para cadastrar membros'
+                                : 'Links servem para cadastrar amigos'
+                              }
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
