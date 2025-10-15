@@ -1650,9 +1650,47 @@ export default function Dashboard() {
         )}
 
         {/* Seção para Membros Não-Administradores (exceto admin3, AdminHitech e plano Saúde) */}
-        {!isAdmin() && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && settings?.member_links_type === 'members' && (
+        {!isAdmin() && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && (
           <div className="mb-8">
-            {/* Informações sobre Amigos */}
+            {/* Seu Link Atual */}
+            {userLink && (
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500 mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                    <LinkIcon className="w-5 h-5" />
+                    Seu Link de Cadastro
+                  </CardTitle>
+                  <CardDescription>
+                    {settings?.member_links_type === 'members' 
+                      ? 'Use este link para cadastrar novos membros'
+                      : 'Use este link para cadastrar amigos'
+                    }
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <h4 className="font-semibold text-green-800 mb-2">
+                        {settings?.member_links_type === 'members' ? '👥 Cadastrar Membros' : '👫 Cadastrar Amigos'}
+                      </h4>
+                      <p className="text-green-700 text-sm mb-3">
+                        {settings?.member_links_type === 'members' 
+                          ? 'Compartilhe este link para que outras pessoas se cadastrem como membros através de você.'
+                          : 'Compartilhe este link para que outras pessoas se cadastrem como amigos através de você.'
+                        }
+                      </p>
+                      <div className="bg-white p-3 rounded border border-green-300">
+                        <p className="text-xs text-green-600 font-medium mb-1">Seu link:</p>
+                        <code className="text-xs break-all text-gray-700 bg-gray-50 p-2 rounded block">{userLink}</code>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Informações sobre Amigos - apenas quando tipo de link for members */}
+            {settings?.member_links_type === 'members' && (
             <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-institutional-blue">
@@ -1698,7 +1736,7 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-
+            )}
 
             {/* Tabela dos Seus Amigos */}
             {settings?.paid_contracts_phase_active && (
