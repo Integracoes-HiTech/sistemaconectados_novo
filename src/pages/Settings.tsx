@@ -56,20 +56,16 @@ export default function Settings() {
 
   // Buscar cor da campanha imediatamente do localStorage
   useEffect(() => {
-    console.log('🎨 Settings - useEffect executando...');
     
     const fetchCampaignColorFromStorage = async () => {
       try {
-        console.log('🎨 Settings - Buscando cor da campanha...');
         
         // Tentar buscar do localStorage primeiro
         const loggedUser = localStorage.getItem('loggedUser');
-        console.log('🎨 Settings - loggedUser:', loggedUser);
         
         if (loggedUser) {
           const userData = JSON.parse(loggedUser);
           const campaignCode = userData.campaign;
-          console.log('🎨 Settings - campaignCode:', campaignCode);
           
           if (campaignCode) {
             const { data: campaignData, error } = await supabase
@@ -78,11 +74,7 @@ export default function Settings() {
               .eq('code', campaignCode)
               .single();
 
-            console.log('🎨 Settings - campaignData:', campaignData);
-            console.log('🎨 Settings - error:', error);
-
             if (!error && campaignData?.primary_color) {
-              console.log('🎨 Settings - Cor encontrada:', campaignData.primary_color);
               // Salvar no localStorage para próxima vez
               localStorage.setItem(`campaign_color_${campaignCode}`, campaignData.primary_color);
               setCampaignColor(campaignData.primary_color);
@@ -95,7 +87,6 @@ export default function Settings() {
       }
       
       // Se não conseguir do localStorage, manter cor padrão
-      console.log('🎨 Settings - Usando cor padrão:', '#14446C');
       setCampaignColor('#14446C');
     };
 
@@ -104,7 +95,6 @@ export default function Settings() {
   }, []); // Executar apenas uma vez no mount
 
   // Log da cor atual
-  console.log('🎨 Settings - campaignColor atual:', campaignColor);
 
   // Buscar informações do plano rapidamente
   useEffect(() => {
@@ -149,8 +139,6 @@ export default function Settings() {
                 maxMembers,
                 maxFriends
               });
-              
-              console.log('🎨 Settings - Quick plan info:', { planName, maxMembers, maxFriends });
             }
           }
         }
@@ -164,7 +152,6 @@ export default function Settings() {
 
   // Forçar aplicação da cor no DOM
   useEffect(() => {
-    console.log('🎨 Settings - Aplicando cor no DOM:', campaignColor);
     
     // Aplicar imediatamente
     const applyColor = () => {
@@ -174,7 +161,6 @@ export default function Settings() {
         const htmlElement = element as HTMLElement;
         htmlElement.style.backgroundColor = campaignColor;
         htmlElement.style.setProperty('background-color', campaignColor, 'important');
-        console.log('🎨 Settings - Cor aplicada no elemento:', element);
       });
       
       // Aplicar também no body se necessário
@@ -184,8 +170,6 @@ export default function Settings() {
       // Forçar também no html
       document.documentElement.style.backgroundColor = campaignColor;
       document.documentElement.style.setProperty('background-color', campaignColor, 'important');
-      
-      console.log('🎨 Settings - Cor aplicada em body e html:', campaignColor);
     };
     
     // Aplicar imediatamente

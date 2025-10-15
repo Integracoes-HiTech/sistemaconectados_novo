@@ -1040,58 +1040,31 @@ export default function Dashboard() {
 
       {/* Conteúdo Principal */}
       <main className="container mx-auto px-4 py-8">
-        {/* Card de Upgrade para Plano Gratuito */}
+        {/* Aviso de Plano Gratuito */}
         {planFeatures.planName.toLowerCase().includes('gratuito') && (
-          <Card className="mb-6 border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50 to-purple-50 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="text-blue-600">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          <Card className="mb-6 border-l-4 border-l-orange-500 bg-orange-50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-orange-600">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-800 text-lg">🚀 Upgrade seu Plano</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Desbloqueie <strong>relatórios avançados</strong>, <strong>exportação PDF/Excel</strong>, <strong>mapa interativo</strong> e muito mais!
+                    <h3 className="font-semibold text-orange-800">Plano Gratuito Ativo</h3>
+                    <p className="text-sm text-orange-700">
+                      Você está usando o plano gratuito. Funcionalidades limitadas: sem relatórios, sem exportação PDF/EXCEL, sem mapa. Limite: {planFeatures.maxMembers + planFeatures.maxFriends} usuários totais.
                     </p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      <span>📊 Relatórios</span>
-                      <span>📈 Exportação</span>
-                      <span>🗺️ Mapa</span>
-                      <span>👥 +{999999 - (planFeatures.maxMembers + planFeatures.maxFriends)} usuários</span>
-                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button 
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold px-6 py-2 rounded-lg shadow-md transition-all duration-200 transform hover:scale-105"
-                    onClick={() => {
-                      // TODO: Implementar navegação para página de upgrade
-                      toast({
-                        title: "🚀 Upgrade Disponível!",
-                        description: "Em breve você poderá fazer upgrade diretamente pelo sistema.",
-                      });
-                    }}
-                  >
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Fazer Upgrade
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="border-blue-300 text-blue-600 hover:bg-blue-50 font-medium px-4 py-2 rounded-lg"
-                    onClick={() => {
-                      // TODO: Implementar modal de comparação de planos
-                      toast({
-                        title: "📋 Comparar Planos",
-                        description: "Em breve você poderá comparar todos os planos disponíveis.",
-                      });
-                    }}
-                  >
-                    Ver Planos
-                  </Button>
-                </div>
+                <Button 
+                  className="bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue font-medium px-4 py-2 rounded-lg"
+                  onClick={() => window.open('https://conectadosdigital.com.br/comece-agora.html#planos', '_blank')}
+                >
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  Fazer Upgrade
+                </Button>
               </div>
             </CardContent>
           </Card>

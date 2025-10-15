@@ -373,13 +373,6 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
 
         const currentMembers = membersData?.length || 0
 
-        console.log('🔍 Verificação de limite de membros:', {
-          currentMembers,
-          maxMembers,
-          planName,
-          canCreate: currentMembers < maxMembers
-        })
-
         if (currentMembers >= maxMembers) {
           return {
             success: false,

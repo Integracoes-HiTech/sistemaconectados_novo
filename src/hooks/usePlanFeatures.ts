@@ -92,19 +92,6 @@ export function usePlanFeatures() {
         setFeatures(basicFeatures);
         setLoading(false);
         
-        console.log('🔍 Debug Plan Features:', {
-          campaignCode: user.campaign,
-          planName,
-          planNameLower,
-          isFreePlan,
-          isEssentialPlan,
-          isProfessionalPlan,
-          isAdvancedPlan,
-          isBLuxoPlan,
-          isValterPlan,
-          isSaudePlan
-        });
-        
         // 🚀 OTIMIZAÇÃO: Buscar detalhes do plano em background (se necessário)
         // Isso NÃO bloqueia a renderização
         let planAmount = 500;
@@ -123,17 +110,9 @@ export function usePlanFeatures() {
               planMaxMembers = planData.max_members || 1500;
             }
           } catch (planError) {
-            console.log('Plano não encontrado, usando valores padrão');
           }
         }
         
-        console.log('🎯 Plan Features Calculated:', {
-          maxMembers: basicFeatures.maxMembers,
-          maxFriends: basicFeatures.maxFriends,
-          canRegisterMembers: basicFeatures.canRegisterMembers,
-          canRegisterFriends: basicFeatures.canRegisterFriends,
-          planName: basicFeatures.planName
-        });
 
       } catch (error) {
         console.error('Erro ao buscar funcionalidades do plano:', error);

@@ -21,16 +21,13 @@ export default function PublicRegisterSaude() {
   const { user, isAdmin3, loading: authLoading } = useAuth();
   
   useEffect(() => {
-    console.log('🔍 PublicRegisterSaude - authLoading:', authLoading, 'user:', user?.username, 'isAdmin3:', isAdmin3())
     
     // Verificar se há dados de usuário no localStorage antes de redirecionar
     const hasUserInStorage = !!localStorage.getItem('loggedUser')
     
     if (!authLoading && (!user || !isAdmin3()) && !hasUserInStorage) {
-      console.log('🚨 Redirecionando para login - não é admin3')
       navigate('/login');
     } else if (!authLoading && (!user || !isAdmin3()) && hasUserInStorage) {
-      console.log('⏳ Usuário no localStorage, aguardando processamento do estado...')
     }
   }, [user, isAdmin3, authLoading, navigate]);
   
@@ -55,11 +52,6 @@ export default function PublicRegisterSaude() {
     // Usar a campanha passada via state ou a campanha do usuário
     const campaignCode = campaign || user?.campaign || 'saude';
     const userCampaign = getCampaignByCode(campaignCode);
-    
-    console.log('🎨 PublicRegisterSaude - Campanha:', campaignCode, 'Cores:', {
-      primary: userCampaign?.primary_color,
-      secondary: userCampaign?.secondary_color
-    });
     
     return {
       bgColor: userCampaign?.primary_color || '#14446C',
