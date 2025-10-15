@@ -1671,7 +1671,7 @@ export default function Dashboard() {
                   <div className="space-y-4">
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                       <h4 className="font-semibold text-green-800 mb-2">
-                        {settings?.member_links_type === 'members' ? '👥 Cadastrar Membros' : '👫 Cadastrar Amigos'}
+                        {settings?.member_links_type === 'members' ? '👥 Cadastrar Membros' : 'Cadastrar Amigos'}
                       </h4>
                       <p className="text-green-700 text-sm mb-3">
                         {settings?.member_links_type === 'members' 
