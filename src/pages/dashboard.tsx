@@ -1682,6 +1682,11 @@ export default function Dashboard() {
                       <div className="bg-white p-3 rounded border border-green-300">
                         <p className="text-xs text-green-600 font-medium mb-1">Seu link:</p>
                         <code className="text-xs break-all text-gray-700 bg-gray-50 p-2 rounded block">{userLink}</code>
+                        <div className="mt-2 text-center">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {settings?.member_links_type === 'members' ? '👥 Membros' : '👫 Amigos'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
