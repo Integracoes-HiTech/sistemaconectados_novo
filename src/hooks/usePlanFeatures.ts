@@ -82,8 +82,8 @@ export function usePlanFeatures() {
           canViewTopMembers: isValterPlan || isBLuxoPlan,
           canViewColorCards: isBLuxoPlan || isValterPlan,
           canViewRankingColumns: isBLuxoPlan || isValterPlan,
-          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 1500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 1500 : ((isAdvancedPlan) ? 999999 : 500)))))),
-          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 100 : (isProfessionalPlan ? 250 : (isValterPlan ? 22500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 22500 : 999999))))),
+          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isValterPlan ? 1500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 1500 : ((isAdvancedPlan) ? 999999 : 500)))))),
+          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isValterPlan ? 22500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 22500 : 999999))))),
           planName,
           planId: campaignData.plano_id
         };

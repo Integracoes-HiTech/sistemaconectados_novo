@@ -337,11 +337,11 @@ export const useUserLinks = (userId?: string, campaign?: string) => {
         maxMembers = 25
         maxFriends = 25
       } else if (isEssentialPlan) {
-        maxMembers = 100
-        maxFriends = 100
+        maxMembers = 1000
+        maxFriends = 1000
       } else if (isProfessionalPlan) {
-        maxMembers = 250
-        maxFriends = 250
+        maxMembers = 2500
+        maxFriends = 2500
       } else if (isValterPlan || isBLuxoPlan) {
         maxMembers = 1500
         maxFriends = 22500
