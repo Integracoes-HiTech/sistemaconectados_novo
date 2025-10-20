@@ -274,8 +274,18 @@ export default function Dashboard() {
     return planFeatures.planName && planFeatures.planName.toLowerCase().includes('b luxo');
   };
 
-  // Função para editar membro (disponível para todos os planos)
+  // Função para editar membro (disponível para todos os planos, exceto Felipe Admin)
   const handleEditMember = (member: { id: string; name: string; [key: string]: unknown }) => {
+    // Felipe Admin não pode editar
+    if (user?.username?.toLowerCase() === 'felipe') {
+      toast({
+        title: "Acesso negado",
+        description: "Felipe Admin não tem permissão para editar membros.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Navegar para a página de cadastro público com dados do membro
     // Usar um linkId fictício para modo de edição
     navigate('/cadastro/edit-member', { 
@@ -287,8 +297,18 @@ export default function Dashboard() {
     });
   };
 
-  // Função para editar friend (disponível para todos os planos)
+  // Função para editar friend (disponível para todos os planos, exceto Felipe Admin)
   const handleEditFriend = (friend: { id: string; name: string; [key: string]: unknown }) => {
+    // Felipe Admin não pode editar
+    if (user?.username?.toLowerCase() === 'felipe') {
+      toast({
+        title: "Acesso negado",
+        description: "Felipe Admin não tem permissão para editar amigos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Navegar para a página de cadastro público com dados do friend
     // Usar um linkId fictício para modo de edição
     navigate('/cadastro/edit-friend', { 
@@ -681,9 +701,9 @@ export default function Dashboard() {
 
   // Lógica de filtro por referrer:
   // Admin veem todos os usuários (sem filtro)
-  // - Outros roles: vê apenas usuários que eles indicaram (filtro por user.full_name)
+  // - Outros roles: vê apenas usuários que eles indicaram (filtro por user.name para membros)
   const isAdminUser = isAdmin();
-  const referrerFilter = isAdminUser ? undefined : user?.full_name;
+  const referrerFilter = isAdminUser ? undefined : user?.name;
   const userIdFilter = isAdminUser ? undefined : user?.id;
   
   // Verificar se usuário está sendo detectado corretamente
@@ -854,10 +874,23 @@ export default function Dashboard() {
   };
 
 
+
+
   // Filtrar membros baseado na pesquisa e filtros específicos (apenas membros, não amigos)
   const filteredMembers = members.filter(member => {
     // Filtrar por campanha primeiro
     if (member.campaign !== user?.campaign) return false;
+    
+    // Se for membro (não admin), mostrar apenas membros vinculados a ele
+    if (isMembro() && !isAdmin()) {
+      // Verificar se o membro foi cadastrado através do link do usuário atual
+      // O referrer é salvo com o nome simples, então comparar principalmente com user.name
+      const isMatch = member.referrer === user?.name;
+      
+      if (!isMatch) {
+        return false;
+      }
+    }
     
     // Filtrar apenas membros (não amigos)
     if (member.is_friend) return false;
@@ -905,6 +938,17 @@ export default function Dashboard() {
   const filteredFriends = friends.filter(friend => {
     // Filtrar por campanha primeiro
     if (friend.campaign !== user?.campaign) return false;
+    
+    // Se for membro (não admin), mostrar apenas amigos vinculados a ele
+    if (isMembro() && !isAdmin()) {
+      // Verificar se o amigo foi cadastrado através do link do usuário atual
+      // O referrer é salvo com o nome simples, então comparar principalmente com user.name
+      const isMatch = friend.referrer === user?.name;
+      
+      if (!isMatch) {
+        return false;
+      }
+    }
     
     const matchesSearch = friendsSearchTerm === "" || 
       // Campos da primeira pessoa
@@ -1970,20 +2014,20 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção de Ranking de Membros (Apenas Administradores, exceto plano Saúde) */}
-        {isAdmin() && !isSaudePlan() && (
+        {/* Seção de Ranking de Membros (Administradores e Membros, exceto plano Saúde) */}
+        {(isAdmin() || isMembro()) && !isSaudePlan() && (
         <Card className="shadow-[var(--shadow-card)] mt-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
               <Users className="w-5 h-5" />
-              {isAdminUser ? 'Membros' : 'Meu Ranking de Membros'}
+              {isAdminUser ? 'Membros' : 'Meus Membros Cadastrados'}
             </CardTitle>
             <CardDescription>
               {isAdminUser
                 ? (planFeatures.planName && (planFeatures.planName.toLowerCase().includes('valter') || planFeatures.planName.toLowerCase().includes('b luxo')))
                 ? "Ranking completo de todos os membros cadastrados no sistema"
                   : "Lista completa de todos os membros cadastrados no sistema"
-                : "Seu ranking pessoal e membros vinculados ao seu link"
+                : "Membros que você cadastrou através do seu link"
               }
             </CardDescription>
             {isAdmin() && planFeatures.canViewReports && planFeatures.canExport && (
@@ -2130,6 +2174,8 @@ export default function Dashboard() {
               />
             </div>
 
+            {/* Filtro de Status - apenas para planos Valter e B Luxo */}
+            {planFeatures.canViewRankingColumns && (
             <div className="relative">
               <TrendingUp className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <select
@@ -2146,6 +2192,7 @@ export default function Dashboard() {
                 <option value="Vermelho">🔴 Vermelho (0 contratos)</option>
               </select>
             </div>
+            )}
           </div>
 
           {/* Tabela de Membros */}
@@ -2264,18 +2311,20 @@ export default function Dashboard() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEditMember(member)}
-                          className="text-white border-0"
-                          style={{ backgroundColor: '#16A34A' }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                        >
-                          <Settings className="w-4 h-4 mr-1" />
-                          Editar
-                        </Button>
+                        {user?.username?.toLowerCase() !== 'felipe' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditMember(member)}
+                            className="text-white border-0"
+                            style={{ backgroundColor: '#16A34A' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                          >
+                            <Settings className="w-4 h-4 mr-1" />
+                            Editar
+                          </Button>
+                        )}
                         {canDeleteUsers() && (
                           <Button
                             size="sm"
@@ -2416,16 +2465,19 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Seção de Ranking de Amigos (Apenas Administradores, exceto plano Saúde) */}
-        {isAdmin() && !isSaudePlan() && (
+        {/* Seção de Ranking de Amigos (Administradores e Membros, exceto plano Saúde) */}
+        {(isAdmin() || isMembro()) && !isSaudePlan() && (
         <Card className="shadow-[var(--shadow-card)] mt-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-institutional-blue">
               <Users className="w-5 h-5" />
-              Amigos 
+              {isAdminUser ? 'Amigos' : 'Meus Amigos Cadastrados'}
             </CardTitle>
             <CardDescription>
-              Lista Completa de todos os amigos cadastrados no sistema
+              {isAdminUser 
+                ? "Lista Completa de todos os amigos cadastrados no sistema"
+                : "Amigos que você cadastrou através do seu link"
+              }
             </CardDescription>
             {planFeatures.canViewReports && planFeatures.canExport && (
             <div className="flex gap-2 mt-4">
@@ -2643,18 +2695,20 @@ export default function Dashboard() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditFriend(friend)}
-                            className="text-white border-0"
-                            style={{ backgroundColor: '#16A34A' }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                          >
-                            <Settings className="w-4 h-4 mr-1" />
-                            Editar
-                          </Button>
+                          {user?.username?.toLowerCase() !== 'felipe' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditFriend(friend)}
+                              className="text-white border-0"
+                              style={{ backgroundColor: '#16A34A' }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                            >
+                              <Settings className="w-4 h-4 mr-1" />
+                              Editar
+                            </Button>
+                          )}
                           {canDeleteUsers() && (
                             <Button
                               size="sm"

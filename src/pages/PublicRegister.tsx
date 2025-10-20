@@ -124,11 +124,6 @@ export default function PublicRegister() {
     try {
       const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
       
-      console.log('🔍 Checking member limit for campaign:', campaignCode);
-      console.log('📊 Plan features:', {
-        maxMembers: planFeatures.maxMembers,
-        planName: planFeatures.planName
-      });
       
       // Contar membros atuais da campanha
       const { data: membersData, error } = await supabase
@@ -925,7 +920,7 @@ export default function PublicRegister() {
           setReferrerData(result.data.user_data);
           setFormData(prev => ({ 
             ...prev, 
-            referrer: result.data.user_data?.name || 'Usuário do Sistema' 
+            referrer: result.data.user_data?.full_name || result.data.user_data?.name || 'Usuário do Sistema' 
           }));
           
           // Link normal - continuar com o fluxo padrão
@@ -1032,11 +1027,6 @@ export default function PublicRegister() {
       // Atualizar auth_users se existir
       let newCredentials = null;
       
-      console.log('🔍 Buscando auth_user para:', {
-        name: memberData.name,
-        phone: memberData.phone,
-        instagram: memberData.instagram
-      });
       
       // Buscar auth_users pelo nome original, telefone ou Instagram
       let authUserData = null;
@@ -1051,7 +1041,6 @@ export default function PublicRegister() {
         
         if (nameData && !nameError) {
           authUserData = nameData;
-          console.log('✅ Encontrado pelo nome:', nameData);
         } else {
           // Se não encontrar pelo nome, tentar pelo telefone
           const { data: phoneData, error: phoneError } = await supabase
@@ -1062,7 +1051,6 @@ export default function PublicRegister() {
           
           if (phoneData && !phoneError) {
             authUserData = phoneData;
-            console.log('✅ Encontrado pelo telefone:', phoneData);
           } else {
             // Se não encontrar pelo telefone, tentar pelo Instagram
             const { data: instagramData, error: instagramError } = await supabase
@@ -1073,7 +1061,6 @@ export default function PublicRegister() {
             
             if (instagramData && !instagramError) {
               authUserData = instagramData;
-              console.log('✅ Encontrado pelo Instagram:', instagramData);
             }
           }
         }
@@ -1082,7 +1069,6 @@ export default function PublicRegister() {
       }
       
       if (authUserData) {
-        console.log('🔍 Auth user encontrado:', authUserData);
         
         // Gerar credenciais baseadas na lógica correta
         // Username: sempre o Instagram (sem @)
@@ -1090,23 +1076,16 @@ export default function PublicRegister() {
         
         // Senha: telefone sem DDD e sem o primeiro 9
         let phoneNumber = formData.phone.replace(/\D/g, ''); // Remove todos os caracteres não numéricos
-        console.log('📱 Telefone original:', formData.phone);
-        console.log('📱 Telefone limpo:', phoneNumber);
         
         if (phoneNumber.length >= 11) {
           // Remove DDD (primeiros 2 dígitos) e o primeiro 9
           phoneNumber = phoneNumber.substring(2); // Remove DDD
-          console.log('📱 Após remover DDD:', phoneNumber);
           
           if (phoneNumber.startsWith('9')) {
             phoneNumber = phoneNumber.substring(1); // Remove o primeiro 9
-            console.log('📱 Após remover primeiro 9:', phoneNumber);
           }
         }
         const newPassword = phoneNumber;
-        console.log('🔐 Senha final:', newPassword);
-        
-        console.log('🔐 Novas credenciais geradas:', { newUsername, newPassword });
         
         // Preparar dados para atualização
         const updateData = {
@@ -1120,7 +1099,6 @@ export default function PublicRegister() {
           updated_at: new Date().toISOString()
         };
         
-        console.log('🔄 Dados para atualização auth_users:', updateData);
         
         // Atualizar auth_users
         const { error: authError } = await supabase
@@ -1133,14 +1111,11 @@ export default function PublicRegister() {
           throw authError;
         }
         
-        console.log('✅ Auth user atualizado com sucesso');
         
         newCredentials = {
           username: newUsername,
           password: newPassword
         };
-      } else {
-        console.log('⚠️ Nenhum auth user encontrado para:', memberData.name);
       }
       
       // Mostrar tela de sucesso com novas credenciais
