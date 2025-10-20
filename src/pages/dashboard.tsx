@@ -274,17 +274,8 @@ export default function Dashboard() {
     return planFeatures.planName && planFeatures.planName.toLowerCase().includes('b luxo');
   };
 
-  // Função para editar membro (apenas planos Valter e B Luxo)
+  // Função para editar membro (disponível para todos os planos)
   const handleEditMember = (member: { id: string; name: string; [key: string]: unknown }) => {
-    if (!isValterPlan() && !isBLuxoPlan()) {
-      toast({
-        title: "Acesso negado",
-        description: "Edição de membros disponível apenas nos planos Valter e B Luxo.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Navegar para a página de cadastro público com dados do membro
     // Usar um linkId fictício para modo de edição
     navigate('/cadastro/edit-member', { 
@@ -296,17 +287,8 @@ export default function Dashboard() {
     });
   };
 
-  // Função para editar friend (apenas planos Valter e B Luxo)
+  // Função para editar friend (disponível para todos os planos)
   const handleEditFriend = (friend: { id: string; name: string; [key: string]: unknown }) => {
-    if (!isValterPlan() && !isBLuxoPlan()) {
-      toast({
-        title: "Acesso negado",
-        description: "Edição de amigos disponível apenas nos planos Valter e B Luxo.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Navegar para a página de cadastro público com dados do friend
     // Usar um linkId fictício para modo de edição
     navigate('/cadastro/edit-friend', { 
@@ -2282,20 +2264,18 @@ export default function Dashboard() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        {(isValterPlan() || isBLuxoPlan()) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditMember(member)}
-                            className="text-white border-0"
-                            style={{ backgroundColor: '#16A34A' }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                          >
-                            <Settings className="w-4 h-4 mr-1" />
-                            Editar
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditMember(member)}
+                          className="text-white border-0"
+                          style={{ backgroundColor: '#16A34A' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          Editar
+                        </Button>
                         {canDeleteUsers() && (
                           <Button
                             size="sm"
@@ -2663,20 +2643,18 @@ export default function Dashboard() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          {(isValterPlan() || isBLuxoPlan()) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditFriend(friend)}
-                              className="text-white border-0"
-                              style={{ backgroundColor: '#16A34A' }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              Editar
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditFriend(friend)}
+                            className="text-white border-0"
+                            style={{ backgroundColor: '#16A34A' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                          >
+                            <Settings className="w-4 h-4 mr-1" />
+                            Editar
+                          </Button>
                           {canDeleteUsers() && (
                             <Button
                               size="sm"

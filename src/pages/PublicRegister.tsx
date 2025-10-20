@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Autocomplete } from "@/components/ui/autocomplete";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
-import { User, Phone, Mail, Instagram, UserPlus, MapPin, Building, AlertCircle, LogIn, ExternalLink, CheckCircle } from "lucide-react";
+import { User, Phone, Mail, Instagram, UserPlus, MapPin, Building, AlertCircle, LogIn, ExternalLink, CheckCircle, ChevronLeft } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useUserLinks, UserLink } from "@/hooks/useUserLinks";
 
@@ -169,8 +169,19 @@ export default function PublicRegister() {
 
   // Buscar cores da campanha baseado no link/referrer com memoização
   const { bgColor, accentColor, textColor, overlayColors } = useMemo(() => {
-    const campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+    // Em modo de edição, buscar a campanha do memberData
+    let campaignCode = 'A'; // padrão
+    
+    if (isEditMode && memberData?.campaign) {
+      campaignCode = memberData.campaign;
+      console.log('🎨 Modo edição - Campanha do memberData:', campaignCode);
+    } else {
+      campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+      console.log('🎨 Modo normal - Campanha do link/referrer:', campaignCode);
+    }
+    
     const campaign = getCampaignByCode(campaignCode);
+    console.log('🎨 Campanha encontrada:', campaign);
     
     // Se tiver campanha do banco, usar essas cores
     if (campaign?.primary_color) {
@@ -197,7 +208,7 @@ export default function PublicRegister() {
       textColor: getTextColor(initialColors.bgColor),
       overlayColors: getOverlayColors(initialColors.bgColor)
     };
-  }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode, linkId, initialColors]);
+  }, [linkData?.campaign, referrerData?.campaign, getCampaignByCode, linkId, initialColors, isEditMode, memberData?.campaign]);
 
 
 
@@ -1579,6 +1590,22 @@ export default function PublicRegister() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: bgColor }}>
+      {/* Botão Voltar para Dashboard - Apenas em modo de edição */}
+      {isEditMode && (
+        <div className="absolute top-4 left-4">
+          <Button
+            onClick={() => navigate('/dashboard')}
+            className="text-white border-0 font-medium"
+            style={{ backgroundColor: '#CFBA7F' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#B8A066'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#CFBA7F'}
+          >
+            <ChevronLeft className="w-4 h-4 mr-2" />
+            Voltar para Dashboard
+          </Button>
+        </div>
+      )}
+      
       {/* Logo no topo */}
       <div className="mb-8">
         <Logo size="lg" showText={true} layout="vertical" textColor="white" />
