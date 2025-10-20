@@ -13,14 +13,19 @@ export const useCredentials = () => {
 
   // Gerar credenciais automáticas baseadas no Instagram e telefone
   const generateCredentials = (userData: { instagram: string; phone: string }): Credentials => {
-    // Username baseado no Instagram (sem @)
-    const username = userData.instagram.replace('@', '').toLowerCase()
+    // Username: sempre o Instagram (sem @)
+    const username = userData.instagram.replace('@', '')
     
-    // Senha baseada no Instagram + últimos 4 dígitos do telefone
-    const instagramClean = userData.instagram.replace('@', '').toLowerCase()
-    const phoneDigits = userData.phone.replace(/\D/g, '') // Remove caracteres não numéricos
-    const lastDigits = phoneDigits.slice(-4) // Últimos 4 dígitos
-    const password = `${instagramClean}${lastDigits}` // Ex: joaosilva4321
+    // Senha: telefone sem DDD e sem o primeiro 9
+    let phoneNumber = userData.phone.replace(/\D/g, ''); // Remove todos os caracteres não numéricos
+    if (phoneNumber.length >= 11) {
+      // Remove DDD (primeiros 2 dígitos) e o primeiro 9
+      phoneNumber = phoneNumber.substring(2); // Remove DDD
+      if (phoneNumber.startsWith('9')) {
+        phoneNumber = phoneNumber.substring(1); // Remove o primeiro 9
+      }
+    }
+    const password = phoneNumber;
     
     return {
       username,

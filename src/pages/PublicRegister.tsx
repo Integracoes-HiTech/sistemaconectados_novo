@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Autocomplete } from "@/components/ui/autocomplete";
@@ -47,21 +47,32 @@ export default function PublicRegister() {
   const { linkId } = useParams();
   const navigate = useNavigate();
   const { login } = useAuth();
+  const location = useLocation();
+  
+  // Verificar se está em modo de edição
+  const { editMode, memberData, isMember } = (location.state as { 
+    editMode?: boolean; 
+    memberData?: any; 
+    isMember?: boolean 
+  }) || {};
+  
+  // Se for um linkId de edição, não buscar dados do link
+  const isEditMode = editMode || linkId?.startsWith('edit-');
   const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    instagram: "",
-    cep: "",
-    city: "",
-    sector: "",
-    referrer: "",
+    name: editMode && memberData ? memberData.name || "" : "",
+    phone: editMode && memberData ? memberData.phone || "" : "",
+    instagram: editMode && memberData ? memberData.instagram || "" : "",
+    cep: editMode && memberData ? memberData.cep || "" : "",
+    city: editMode && memberData ? memberData.city || "" : "",
+    sector: editMode && memberData ? memberData.sector || "" : "",
+    referrer: editMode && memberData ? memberData.referrer || "" : "",
     // Dados do parceiro (obrigatório)
-    couple_name: "",
-    couple_phone: "",
-    couple_instagram: "",
-    couple_cep: "",
-    couple_city: "",
-    couple_sector: ""
+    couple_name: editMode && memberData ? memberData.couple_name || "" : "",
+    couple_phone: editMode && memberData ? memberData.couple_phone || "" : "",
+    couple_instagram: editMode && memberData ? memberData.couple_instagram || "" : "",
+    couple_cep: editMode && memberData ? memberData.couple_cep || "" : "",
+    couple_city: editMode && memberData ? memberData.couple_city || "" : "",
+    couple_sector: editMode && memberData ? memberData.couple_sector || "" : ""
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -324,6 +335,15 @@ export default function PublicRegister() {
       return;
     }
     
+    // Primeiro verificar com a nova validação
+    const instagramError = validateInstagramBasic(formData.instagram);
+    if (instagramError) {
+      setInstagramValidationError(instagramError);
+      setIsInstagramValid(false);
+      return;
+    }
+    
+    // Se passou na validação básica, fazer validação adicional
     const validation = await validateInstagram(formData.instagram);
     if (validation.isValid) {
       setInstagramValidationError(null);
@@ -524,10 +544,19 @@ export default function PublicRegister() {
       return;
     }
 
+    // Primeiro verificar com a nova validação
+    const coupleInstagramError = validateInstagramBasic(formData.couple_instagram);
+    if (coupleInstagramError) {
+      setCoupleInstagramValidationError(coupleInstagramError);
+      setIsCoupleInstagramValid(false);
+      return;
+    }
+
     setIsValidatingCoupleInstagram(true);
     setCoupleInstagramValidationError(null);
 
     try {
+      // Se passou na validação básica, fazer validação adicional
       const validation = await validateInstagram(formData.couple_instagram);
       if (validation.isValid) {
         setIsCoupleInstagramValid(true);
@@ -648,6 +677,46 @@ export default function PublicRegister() {
     return errors;
   };
 
+  // Função para validar Instagram (validação básica)
+  const validateInstagramBasic = (instagram: string): string | null => {
+    if (!instagram) return null;
+    
+    const instagramClean = instagram.replace('@', '').toLowerCase();
+    
+    // Lista de nomes genéricos/fake que devem ser bloqueados
+    const blockedNames = [
+      'insta', 'instagram', 'seminsta', 'ainstao', 'naotem', 'seminsta', 'aaaaaaa', 
+      'instanao', 'naotenhoinsta', 'nãotenhoinstragram', 'instanaotem', 'asdadd', 
+      'aaaa', 'bbbbb', 'nao', 'tem', 'insta', 'sem', 'não', 'tenho', 'aaaaa', 
+      'bbbb', 'cccc', 'dddd', 'eeee', 'ffff', 'gggg', 'hhhh', 'iiii', 'jjjj',
+      'kkkk', 'llll', 'mmmm', 'nnnn', 'oooo', 'pppp', 'qqqq', 'rrrr', 'ssss',
+      'tttt', 'uuuu', 'vvvv', 'wwww', 'xxxx', 'yyyy', 'zzzz', 'teste', 'test',
+      'usuario', 'user', 'nome', 'name', 'exemplo', 'example', 'fake', 'falso'
+    ];
+    
+    // Verificar se é um nome bloqueado
+    if (blockedNames.includes(instagramClean)) {
+      return 'Por favor, insira um Instagram válido e real.';
+    }
+    
+    // Verificar se tem pelo menos 3 caracteres
+    if (instagramClean.length < 3) {
+      return 'Instagram deve ter pelo menos 3 caracteres.';
+    }
+    
+    // Verificar se não é apenas números
+    if (/^\d+$/.test(instagramClean)) {
+      return 'Instagram deve conter letras.';
+    }
+    
+    // Verificar se não é apenas caracteres repetidos
+    if (/(.)\1{4,}/.test(instagramClean)) {
+      return 'Instagram não pode ter muitos caracteres repetidos.';
+    }
+    
+    return null;
+  };
+
   const validateRequiredFields = async () => {
     const errors: Record<string, string> = {};
     
@@ -679,9 +748,16 @@ export default function PublicRegister() {
     if (!formData.instagram.trim()) {
       errors.instagram = 'Instagram é obrigatório';
     } else {
-      const instagramValidation = await validateInstagram(formData.instagram);
-      if (!instagramValidation.isValid) {
-        errors.instagram = instagramValidation.error || 'Instagram inválido';
+      // Usar a nova validação de Instagram
+      const instagramError = validateInstagramBasic(formData.instagram);
+      if (instagramError) {
+        errors.instagram = instagramError;
+      } else {
+        // Validação adicional (formato, etc.)
+        const instagramValidation = await validateInstagram(formData.instagram);
+        if (!instagramValidation.isValid) {
+          errors.instagram = instagramValidation.error || 'Instagram inválido';
+        }
       }
     }
     
@@ -729,9 +805,16 @@ export default function PublicRegister() {
     if (!formData.couple_instagram.trim()) {
       errors.couple_instagram = 'Instagram do parceiro é obrigatório';
     } else {
-      const coupleInstagramValidation = await validateInstagram(formData.couple_instagram);
-      if (!coupleInstagramValidation.isValid) {
-        errors.couple_instagram = coupleInstagramValidation.error || 'Instagram inválido';
+      // Usar a nova validação de Instagram
+      const coupleInstagramError = validateInstagramBasic(formData.couple_instagram);
+      if (coupleInstagramError) {
+        errors.couple_instagram = coupleInstagramError;
+      } else {
+        // Validação adicional (formato, etc.)
+        const coupleInstagramValidation = await validateInstagram(formData.couple_instagram);
+        if (!coupleInstagramValidation.isValid) {
+          errors.couple_instagram = coupleInstagramValidation.error || 'Instagram inválido';
+        }
       }
     }
     
@@ -819,7 +902,7 @@ export default function PublicRegister() {
 
   // Função memoizada para buscar dados do referrer
   const fetchReferrerData = useCallback(async () => {
-    if (!linkId || hasFetchedData.current) return;
+    if (!linkId || hasFetchedData.current || isEditMode) return;
     
     hasFetchedData.current = true;
       
@@ -884,13 +967,13 @@ export default function PublicRegister() {
 
   // Buscar dados do referrer quando o componente carregar
   useEffect(() => {
-    if (linkId) {
+    if (linkId && !isEditMode) {
       fetchReferrerData();
     }
-  }, [linkId, fetchReferrerData]);
+  }, [linkId, fetchReferrerData, isEditMode]);
 
-  // Aguardar carregar campanhas antes de renderizar para evitar flash de cores
-  if (campaignsLoading) {
+  // Aguardar carregar campanhas antes de renderizar para evitar flash de cores (exceto em modo de edição)
+  if (campaignsLoading && !isEditMode) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
         <div className="text-white text-center">
@@ -901,8 +984,177 @@ export default function PublicRegister() {
     );
   }
 
+  // Função para atualizar membro/friend
+  const handleUpdate = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Determinar qual tabela atualizar
+      const tableName = isMember ? 'members' : 'friends';
+      
+      // Preparar dados para update
+      const updateData = {
+        name: formData.name,
+        phone: formData.phone,
+        instagram: formData.instagram,
+        cep: formData.cep,
+        city: formData.city,
+        sector: formData.sector,
+        referrer: formData.referrer,
+        couple_name: formData.couple_name,
+        couple_phone: formData.couple_phone,
+        couple_instagram: formData.couple_instagram,
+        couple_cep: formData.couple_cep,
+        couple_city: formData.couple_city,
+        couple_sector: formData.couple_sector,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Fazer update no banco
+      const { error } = await supabase
+        .from(tableName)
+        .update(updateData)
+        .eq('id', memberData.id);
+      
+      if (error) throw error;
+      
+      // Atualizar auth_users se existir
+      let newCredentials = null;
+      
+      console.log('🔍 Buscando auth_user para:', {
+        name: memberData.name,
+        phone: memberData.phone,
+        instagram: memberData.instagram
+      });
+      
+      // Buscar auth_users pelo nome original, telefone ou Instagram
+      let authUserData = null;
+      
+      // Tentar buscar pelo nome primeiro
+      try {
+        const { data: nameData, error: nameError } = await supabase
+          .from('auth_users')
+          .select('*')
+          .eq('name', memberData.name)
+          .single();
+        
+        if (nameData && !nameError) {
+          authUserData = nameData;
+          console.log('✅ Encontrado pelo nome:', nameData);
+        } else {
+          // Se não encontrar pelo nome, tentar pelo telefone
+          const { data: phoneData, error: phoneError } = await supabase
+            .from('auth_users')
+            .select('*')
+            .eq('phone', memberData.phone)
+            .single();
+          
+          if (phoneData && !phoneError) {
+            authUserData = phoneData;
+            console.log('✅ Encontrado pelo telefone:', phoneData);
+          } else {
+            // Se não encontrar pelo telefone, tentar pelo Instagram
+            const { data: instagramData, error: instagramError } = await supabase
+              .from('auth_users')
+              .select('*')
+              .eq('instagram', memberData.instagram)
+              .single();
+            
+            if (instagramData && !instagramError) {
+              authUserData = instagramData;
+              console.log('✅ Encontrado pelo Instagram:', instagramData);
+            }
+          }
+        }
+      } catch (searchError) {
+        console.error('❌ Erro na busca do auth_user:', searchError);
+      }
+      
+      if (authUserData) {
+        console.log('🔍 Auth user encontrado:', authUserData);
+        
+        // Gerar credenciais baseadas na lógica correta
+        // Username: sempre o Instagram (sem @)
+        const newUsername = formData.instagram.replace('@', '');
+        
+        // Senha: telefone sem DDD e sem o primeiro 9
+        let phoneNumber = formData.phone.replace(/\D/g, ''); // Remove todos os caracteres não numéricos
+        console.log('📱 Telefone original:', formData.phone);
+        console.log('📱 Telefone limpo:', phoneNumber);
+        
+        if (phoneNumber.length >= 11) {
+          // Remove DDD (primeiros 2 dígitos) e o primeiro 9
+          phoneNumber = phoneNumber.substring(2); // Remove DDD
+          console.log('📱 Após remover DDD:', phoneNumber);
+          
+          if (phoneNumber.startsWith('9')) {
+            phoneNumber = phoneNumber.substring(1); // Remove o primeiro 9
+            console.log('📱 Após remover primeiro 9:', phoneNumber);
+          }
+        }
+        const newPassword = phoneNumber;
+        console.log('🔐 Senha final:', newPassword);
+        
+        console.log('🔐 Novas credenciais geradas:', { newUsername, newPassword });
+        
+        // Preparar dados para atualização
+        const updateData = {
+          username: newUsername,
+          password: newPassword,
+          name: formData.name,
+          phone: formData.phone,
+          instagram: formData.instagram,
+          display_name: formData.name.toLowerCase(),
+          full_name: `${formData.name} - ${isMember ? 'Membro' : 'Amigo'}`,
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('🔄 Dados para atualização auth_users:', updateData);
+        
+        // Atualizar auth_users
+        const { error: authError } = await supabase
+          .from('auth_users')
+          .update(updateData)
+          .eq('id', authUserData.id);
+        
+        if (authError) {
+          console.error('❌ Erro ao atualizar auth_users:', authError);
+          throw authError;
+        }
+        
+        console.log('✅ Auth user atualizado com sucesso');
+        
+        newCredentials = {
+          username: newUsername,
+          password: newPassword
+        };
+      } else {
+        console.log('⚠️ Nenhum auth user encontrado para:', memberData.name);
+      }
+      
+      // Mostrar tela de sucesso com novas credenciais
+      setIsSuccess(true);
+      setUserCredentials(newCredentials);
+      
+    } catch (error) {
+      toast({
+        title: "Erro ao atualizar",
+        description: error instanceof Error ? error.message : "Erro ao atualizar. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Se estiver em modo de edição, fazer update
+    if (editMode && memberData) {
+      await handleUpdate();
+      return;
+    }
     
     // Valida todos os campos obrigatórios
     const validationErrors = await validateRequiredFields();
@@ -1140,15 +1392,20 @@ export default function PublicRegister() {
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
             <UserPlus className="w-16 h-16 mx-auto mb-4" style={{ color: '#CFBA7F' }} />
             <h2 className="text-2xl font-bold mb-2" style={{ color: '#14446C' }}>
-              Cadastro Realizado!
+              {editMode ? 'Atualização Realizada!' : 'Cadastro Realizado!'}
             </h2>
             <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: overlayColors.bgMedium }}>
               <p className="text-sm mb-2 text-gray-700">
-               
-            </p>
+                {editMode 
+                  ? `${isMember ? 'Membro' : 'Amigo'} atualizado com sucesso!`
+                  : 'Dupla cadastrada e vinculada com sucesso!'
+                }
+              </p>
               <div className="space-y-3 text-sm">
                 <div className="p-3 rounded-lg border" style={{ backgroundColor: overlayColors.bgLight, borderColor: overlayColors.border }}>
-                  <p className="font-medium mb-2" style={{ color: '#14446C' }}>Conta Compartilhada</p>
+                  <p className="font-medium mb-2" style={{ color: '#14446C' }}>
+                    {editMode ? 'Novas Credenciais' : 'Conta Compartilhada'}
+                  </p>
                   <p className="text-gray-700"><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
                   <p className="text-gray-700"><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
                   <p className="text-xs mt-2 text-gray-600">
@@ -1175,8 +1432,16 @@ export default function PublicRegister() {
               }
             </p>
             
-            {/* Botão para Entrar no Sistema - Só aparece para membros */}
-            {linkData?.link_type !== 'friends' && (
+            {/* Botão para Entrar no Sistema ou Voltar ao Dashboard */}
+            {editMode ? (
+              <Button
+                onClick={() => navigate('/dashboard')}
+                className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200 mb-4"
+              >
+                <ExternalLink className="w-5 h-5 mr-2" />
+                Voltar ao Dashboard
+              </Button>
+            ) : linkData?.link_type !== 'friends' && (
               <Button
                 onClick={async () => {
                   try {
@@ -1240,7 +1505,7 @@ export default function PublicRegister() {
   }
 
   // TELA DE LINK DESATIVADO
-  if (isLinkDeactivated) {
+  if (isLinkDeactivated && !isEditMode) {
     return (
       <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
         {/* Logo no topo */}
@@ -1336,9 +1601,11 @@ export default function PublicRegister() {
         </div>
         
         <h1 className="text-2xl font-bold text-white mb-2">
-          {linkData?.link_type === 'friends' 
-            ? 'Membro Cadastrando Amigo' 
-            : 'Cadastre-se como Membro Conectado'
+          {editMode 
+            ? `Editar ${isMember ? 'Membro' : 'Amigo'}`
+            : linkData?.link_type === 'friends' 
+              ? 'Membro Cadastrando Amigo' 
+              : 'Cadastre-se como Membro Conectado'
           }
         </h1>
         <p className="text-gray-300">
@@ -1677,7 +1944,7 @@ export default function PublicRegister() {
           />
         </div>
 
-        {/* Botão Cadastrar */}
+        {/* Botão Cadastrar/Atualizar */}
         <Button
           type="button"
           onClick={handleSubmit}
@@ -1687,12 +1954,12 @@ export default function PublicRegister() {
           {isLoading ? (
             <div className="flex items-center gap-2">
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Cadastrando...
+              {editMode ? 'Atualizando...' : 'Cadastrando...'}
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <UserPlus className="w-5 h-5" />
-              Finalizar Cadastro
+              {editMode ? 'Atualizar' : 'Finalizar Cadastro'}
             </div>
           )}
         </Button>

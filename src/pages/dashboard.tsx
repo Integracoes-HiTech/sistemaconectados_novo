@@ -265,6 +265,59 @@ export default function Dashboard() {
 
   const theme = getCampaignTheme();
 
+  // Funções para verificar planos
+  const isValterPlan = () => {
+    return planFeatures.planName && planFeatures.planName.toLowerCase().includes('valter');
+  };
+
+  const isBLuxoPlan = () => {
+    return planFeatures.planName && planFeatures.planName.toLowerCase().includes('b luxo');
+  };
+
+  // Função para editar membro (apenas planos Valter e B Luxo)
+  const handleEditMember = (member: { id: string; name: string; [key: string]: unknown }) => {
+    if (!isValterPlan() && !isBLuxoPlan()) {
+      toast({
+        title: "Acesso negado",
+        description: "Edição de membros disponível apenas nos planos Valter e B Luxo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navegar para a página de cadastro público com dados do membro
+    // Usar um linkId fictício para modo de edição
+    navigate('/cadastro/edit-member', { 
+      state: { 
+        editMode: true, 
+        memberData: member,
+        isMember: true
+      } 
+    });
+  };
+
+  // Função para editar friend (apenas planos Valter e B Luxo)
+  const handleEditFriend = (friend: { id: string; name: string; [key: string]: unknown }) => {
+    if (!isValterPlan() && !isBLuxoPlan()) {
+      toast({
+        title: "Acesso negado",
+        description: "Edição de amigos disponível apenas nos planos Valter e B Luxo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navegar para a página de cadastro público com dados do friend
+    // Usar um linkId fictício para modo de edição
+    navigate('/cadastro/edit-friend', { 
+      state: { 
+        editMode: true, 
+        memberData: friend,
+        isMember: false
+      } 
+    });
+  };
+
   // Função para remover membro (soft delete - apenas administradores completos)
   const handleRemoveMember = async (memberId: string, memberName: string) => {
     if (!canDeleteUsers()) {
@@ -1267,6 +1320,46 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* Histórico de Cobranças - Apenas para planos Essencial, Profissional e Avançado */}
+        {isAdmin() && planFeatures.planName && (
+          planFeatures.planName.toLowerCase().includes('essencial') || 
+          planFeatures.planName.toLowerCase().includes('profissional') || 
+          planFeatures.planName.toLowerCase().includes('avançado') || 
+          planFeatures.planName.toLowerCase().includes('avancado')
+        ) && (
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500 mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                <CalendarDays className="w-5 h-5" />
+                Histórico de Cobranças
+              </CardTitle>
+              <CardDescription>
+                Visualize o histórico de pagamentos e cobranças do seu plano
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg border bg-green-50 border-green-200">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2" style={{ color: '#14446C' }}>
+                    <CalendarDays className="w-4 h-4" style={{ color: '#14446C' }} />
+                    Plano: {planFeatures.planName}
+                  </h4>
+                  <p className="text-sm mb-3" style={{ color: '#14446C' }}>
+                    Acesse o histórico completo de suas cobranças, pagamentos e faturas.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/paid-contracts')}
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium text-sm"
+                  >
+                    Ver Histórico de Cobranças
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Mapa Interativo - Apenas Administradores com Plano Avançado */}
         {isAdmin() && planFeatures.canViewMap && (
           <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-blue-500 mb-6 overflow-hidden">
@@ -2187,19 +2280,35 @@ export default function Dashboard() {
                         <span className="text-sm text-institutional-gold font-medium">{member.referrer}</span>
                       </div>
                     </td>
-                    {canDeleteUsers() && (
-                      <td className="py-3 px-4">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleRemoveMember(member.id, member.name)}
-                          className="bg-red-600 hover:bg-red-700 text-white"
-                        >
-                          <UserIcon className="w-4 h-4 mr-1" />
-                          Excluir
-                        </Button>
-                      </td>
-                    )}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        {(isValterPlan() || isBLuxoPlan()) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditMember(member)}
+                            className="text-white border-0"
+                            style={{ backgroundColor: '#16A34A' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                          >
+                            <Settings className="w-4 h-4 mr-1" />
+                            Editar
+                          </Button>
+                        )}
+                        {canDeleteUsers() && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRemoveMember(member.id, member.name)}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            <UserIcon className="w-4 h-4 mr-1" />
+                            Excluir
+                          </Button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -2552,19 +2661,35 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </td>
-                      {canDeleteUsers() && (
-                        <td className="py-3 px-4">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleRemoveFriend(friend.id, friend.name)}
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                          >
-                            <UserIcon className="w-4 h-4 mr-1" />
-                            Excluir
-                          </Button>
-                        </td>
-                      )}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {(isValterPlan() || isBLuxoPlan()) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditFriend(friend)}
+                              className="text-white border-0"
+                              style={{ backgroundColor: '#16A34A' }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                            >
+                              <Settings className="w-4 h-4 mr-1" />
+                              Editar
+                            </Button>
+                          )}
+                          {canDeleteUsers() && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleRemoveFriend(friend.id, friend.name)}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              <UserIcon className="w-4 h-4 mr-1" />
+                              Excluir
+                            </Button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
