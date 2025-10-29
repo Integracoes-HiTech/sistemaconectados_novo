@@ -20,17 +20,12 @@ export interface EmailData {
 export const emailService = {
   // Inicializar EmailJS
   init: () => {
-    console.log("🔑 Inicializando EmailJS com Public Key:", EMAILJS_PUBLIC_KEY);
     emailjs.init(EMAILJS_PUBLIC_KEY);
   },
 
   // Enviar email de boas-vindas com credenciais
   sendWelcomeEmail: async (emailData: EmailData) => {
     try {
-      console.log("📧 Iniciando envio de email...");
-      console.log("Service ID:", EMAILJS_SERVICE_ID);
-      console.log("Template ID:", EMAILJS_TEMPLATE_ID);
-      console.log("Public Key:", EMAILJS_PUBLIC_KEY);
       
       // Inicializar EmailJS antes de enviar
       emailjs.init(EMAILJS_PUBLIC_KEY);
@@ -50,7 +45,6 @@ export const emailService = {
         system_url: emailData.system_url
       }
 
-      console.log("Template params:", templateParams);
 
       const response = await emailjs.send(
         EMAILJS_SERVICE_ID,
@@ -58,7 +52,6 @@ export const emailService = {
         templateParams
       )
 
-      console.log("✅ Email enviado com sucesso! Response:", response);
       return { success: true, response }
     } catch (error) {
       console.error('❌ Erro ao enviar email:', error)

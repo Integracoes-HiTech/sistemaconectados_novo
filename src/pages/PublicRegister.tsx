@@ -13,7 +13,6 @@ import { useUserLinks, UserLink } from "@/hooks/useUserLinks";
 interface ExtendedUserLink extends UserLink {
   link_type: 'members' | 'friends';
 }
-import { useCredentials } from "@/hooks/useCredentials";
 import { useMembers } from "@/hooks/useMembers";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
 import { useFriends } from "@/hooks/useFriends";
@@ -21,7 +20,7 @@ import { emailService, generateCredentials } from "@/services/emailService";
 import { buscarCep, validarFormatoCep, formatarCep, limparCep, CepData } from "@/services/cepService";
 // COMENTADO: Validação do Instagram (não está pronta)
 // import { validateInstagramAccount } from "@/services/instagramValidation";
-import { AuthUser, supabase } from "@/lib/supabase";
+import { AuthUser, supabaseServerless } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useCampaigns } from "@/hooks/useCampaigns";
 import { usePlanFeatures } from "@/hooks/usePlanFeatures";
@@ -46,14 +45,15 @@ const getInitialCampaignColors = (linkId?: string): { bgColor: string; accentCol
 export default function PublicRegister() {
   const { linkId } = useParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAdmin, user } = useAuth();
   const location = useLocation();
   
   // Verificar se está em modo de edição
-  const { editMode, memberData, isMember } = (location.state as { 
+  const { editMode, memberData, isMember, loggedUser } = (location.state as { 
     editMode?: boolean; 
     memberData?: any; 
-    isMember?: boolean 
+    isMember?: boolean;
+    loggedUser?: any;
   }) || {};
   
   // Se for um linkId de edição, não buscar dados do link
@@ -66,6 +66,8 @@ export default function PublicRegister() {
     city: editMode && memberData ? memberData.city || "" : "",
     sector: editMode && memberData ? memberData.sector || "" : "",
     referrer: editMode && memberData ? memberData.referrer || "" : "",
+    referrer_name: editMode && memberData ? (memberData.referrer_name || "") : "",
+    referrer_phone: editMode && memberData ? (memberData.referrer_phone || "") : "",
     // Dados do parceiro (obrigatório)
     couple_name: editMode && memberData ? memberData.couple_name || "" : "",
     couple_phone: editMode && memberData ? memberData.couple_phone || "" : "",
@@ -77,14 +79,72 @@ export default function PublicRegister() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1); // 1 = Primeiro formulário, 2 = Segundo formulário
   const [referrerData, setReferrerData] = useState<AuthUser | null>(null);
   const [linkData, setLinkData] = useState<ExtendedUserLink | null>(null);
-  const [userCredentials, setUserCredentials] = useState<{ username: string; password: string } | null>(null);
+  const [generatedMemberLink, setGeneratedMemberLink] = useState<string | null>(null); // Link gerado para o novo membro
   const [cepLoading, setCepLoading] = useState(false);
   const [coupleCepLoading, setCoupleCepLoading] = useState(false);
   
   // Estados para dados do CEP (cidade e setor)
   const [cepData, setCepData] = useState<CepData | null>(null);
+
+  // Função para aplicar máscara de nome (primeira letra maiúscula, resto minúsculo, primeira letra após espaço maiúscula)
+  const formatName = (value: string) => {
+    return value
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Função para gerar link_id baseado no nome do membro
+  const generateLinkIdFromName = (name: string): string => {
+    // Converter para minúsculo
+    let cleanName = name.toLowerCase().trim();
+    
+    // Remover acentos (simplificado)
+    cleanName = cleanName
+      .replace(/[áàâãä]/g, 'a')
+      .replace(/[éèêë]/g, 'e')
+      .replace(/[íìîï]/g, 'i')
+      .replace(/[óòôõö]/g, 'o')
+      .replace(/[úùûü]/g, 'u')
+      .replace(/[ç]/g, 'c')
+      .replace(/[ñ]/g, 'n');
+    
+    // Substituir espaços por hífen
+    cleanName = cleanName.replace(/\s+/g, '-');
+    
+    // Remover caracteres especiais, manter apenas letras, números e hífen
+    cleanName = cleanName.replace(/[^a-z0-9-]/g, '');
+    
+    // Remover hífens consecutivos
+    cleanName = cleanName.replace(/-+/g, '-');
+    
+    // Remover hífen no início e fim
+    cleanName = cleanName.replace(/^-+|-+$/g, '');
+    
+    // Adicionar prefixo "link-"
+    const linkId = `link-${cleanName}`;
+    
+    // Limitar tamanho (link_id pode ter limite de 100 caracteres)
+    if (linkId.length > 100) {
+      return linkId.substring(0, 100);
+    }
+    
+    return linkId;
+  };
+
+  // Função para validar se o primeiro formulário está completo
+  const isFirstStepComplete = () => {
+    return formData.name.trim() !== '' && 
+           formData.phone.trim() !== '' && 
+           formData.instagram.trim() !== '' && 
+           formData.cep.trim() !== '' && 
+           formData.city.trim() !== '' && 
+           formData.sector.trim() !== '';
+  };
   const [coupleCepData, setCoupleCepData] = useState<CepData | null>(null);
   const hasFetchedData = useRef(false);
   
@@ -107,8 +167,7 @@ export default function PublicRegister() {
   const [linkDeactivationMessage, setLinkDeactivationMessage] = useState<string>("");
   
   const { addUser, checkUserExists } = useUsers();
-  const { getUserByLinkId, incrementClickCount } = useUserLinks();
-  const { createUserWithCredentials } = useCredentials();
+  const { getUserByLinkId, incrementClickCount, createUserLink } = useUserLinks();
   const { addMember } = useMembers();
   const { shouldShowMemberLimitAlert } = useSystemSettings();
   const { addFriend } = useFriends();
@@ -126,7 +185,7 @@ export default function PublicRegister() {
       
       
       // Contar membros atuais da campanha
-      const { data: membersData, error } = await supabase
+      const { data: membersData, error } = await supabaseServerless
         .from('members')
         .select('id')
         .eq('campaign', campaignCode)
@@ -138,12 +197,6 @@ export default function PublicRegister() {
       const currentCount = membersData?.length || 0;
       const maxLimit = planFeatures.maxMembers;
 
-      console.log('📈 Member count result:', {
-        currentCount,
-        maxLimit,
-        canRegister: currentCount < maxLimit,
-        percentage: (currentCount / maxLimit) * 100
-      });
 
       return {
         current: currentCount,
@@ -169,14 +222,11 @@ export default function PublicRegister() {
     
     if (isEditMode && memberData?.campaign) {
       campaignCode = memberData.campaign;
-      console.log('🎨 Modo edição - Campanha do memberData:', campaignCode);
     } else {
       campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
-      console.log('🎨 Modo normal - Campanha do link/referrer:', campaignCode);
     }
     
     const campaign = getCampaignByCode(campaignCode);
-    console.log('🎨 Campanha encontrada:', campaign);
     
     // Se tiver campanha do banco, usar essas cores
     if (campaign?.primary_color) {
@@ -425,74 +475,19 @@ export default function PublicRegister() {
     }
   };
 
-  // Função para atualizar contadores do membro após cadastro de amigo
-  const updateMemberCountersAfterRegistration = async (referrerName: string) => {
+  // Função para atualizar ranking usando sistema automático do banco
+  const updateRankingAutomatically = async () => {
     try {
-      // Atualizando contadores do membro após cadastro
+      // Usar função RPC do banco que já tem sistema automático por campanha
+      const { error } = await supabaseServerless.rpc('update_complete_ranking');
       
-      // Buscar o membro referrer
-      const { data: referrerMembers, error: referrerError } = await supabase
-        .from('members')
-        .select('id, name, contracts_completed')
-        .eq('name', referrerName)
-        .eq('status', 'Ativo')
-        .is('deleted_at', null);
-
-      const referrerMember = referrerMembers?.[0];
-
-      if (referrerError) {
-        // Erro ao buscar referrer
-        return;
+      if (error) {
+        console.warn('Erro ao executar ranking automático:', error);
       }
-
-      if (!referrerMember) {
-        // Referrer não encontrado
-        return;
-      }
-
-      // Contar amigos ativos cadastrados por este membro
-      const { data: friendsData, error: friendsError } = await supabase
-        .from('friends')
-        .select('id')
-        .eq('referrer', referrerName)
-        .eq('status', 'Ativo')
-        .is('deleted_at', null);
-
-      if (friendsError) {
-        // Erro ao contar amigos
-        return;
-      }
-
-      const friendsCount = friendsData?.length || 0;
-      const currentContracts = referrerMember.contracts_completed;
-
-      // Contratos atuais e amigos cadastrados
-
-      // Atualizar contracts_completed
-      // Atualizando contratos após cadastro
-      
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({ 
-          contracts_completed: friendsCount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', referrerMember.id);
-
-      if (updateError) {
-        // Erro ao atualizar contratos do membro
-        return;
-      }
-
-      // Atualizar ranking e status
-      await updateMemberRankingAndStatus(referrerMember.id, friendsCount);
-      
-      // Contadores do membro atualizados após cadastro
-
     } catch (err) {
-      // Erro ao atualizar contadores após cadastro
+      console.warn('Erro ao executar ranking automático:', err);
     }
-  }
+  };
 
   // Função para atualizar ranking e status do membro
   const updateMemberRankingAndStatus = async (memberId: string, contractsCount: number) => {
@@ -508,7 +503,7 @@ export default function PublicRegister() {
       }
 
       // Atualizar status do membro
-      const { error: statusError } = await supabase
+      const { error: statusError } = await supabaseServerless
         .from('members')
         .update({ 
           ranking_status: rankingStatus,
@@ -526,29 +521,168 @@ export default function PublicRegister() {
     } catch (err) {
       // Erro ao atualizar ranking e status
     }
-  }
+  };
 
-  // Função para atualizar ranking usando sistema automático do banco
-  const updateRankingAutomatically = async () => {
+  // Função para atualizar contadores do membro após cadastro de amigo
+  const updateMemberCountersAfterRegistration = async (referrerName: string, memberId?: string) => {
     try {
-      // Usar função RPC do banco que já tem sistema automático por campanha
-      const { error } = await supabase.rpc('update_complete_ranking');
+      console.log('📊 Iniciando atualização de contadores. Referrer:', referrerName, 'Member ID:', memberId);
+      // Atualizando contadores do membro após cadastro
       
-      if (error) {
-        console.warn('Erro ao executar ranking automático:', error);
+      let referrerMember: { id: string; contracts_completed: number } | null = null;
+
+      // Se member_id foi fornecido, buscar diretamente pelo ID
+      if (memberId) {
+        const { data: memberData, error: memberError } = await supabaseServerless
+          .from('members')
+          .select('id, name, contracts_completed, deleted_at, status')
+          .eq('id', memberId)
+          .eq('status', 'Ativo')
+          .is('deleted_at', null)
+          .single();
+
+        if (!memberError && memberData) {
+          referrerMember = memberData as any;
+        }
       }
+
+      // Se não encontrou pelo ID ou não foi fornecido ID, buscar pelo nome
+      if (!referrerMember) {
+        // Extrair nome simples do referrer (remover sufixos como "- Membro", "- Amigo", etc.)
+        const extractSimpleName = (fullName: string): string => {
+          // Remover sufixos como "- Membro", "- Amigo", "- Administrador"
+          const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+          return cleanName;
+        };
+
+      const simpleReferrerName = extractSimpleName(referrerName);
+      
+      // Buscar o membro referrer pelo nome simples primeiro
+      const { data: referrerMembers, error: referrerError } = await supabaseServerless
+          .from('members')
+          .select('id, name, contracts_completed, deleted_at, status')
+          .eq('name', simpleReferrerName)
+          .eq('status', 'Ativo');
+
+        // Garantir que data é um array
+        const referrerMembersArray = Array.isArray(referrerMembers) ? referrerMembers : (referrerMembers ? [referrerMembers] : []);
+        
+        // Filtrar membros não excluídos no frontend
+        referrerMember = referrerMembersArray.filter(m => !m.deleted_at)?.[0] as any;
+
+        // Se não encontrou com nome simples, tentar com nome completo
+        if (!referrerMember) {
+          const { data: referrerMembersFull, error: referrerErrorFull } = await supabaseServerless
+            .from('members')
+            .select('id, name, contracts_completed, deleted_at, status')
+            .ilike('name', referrerName)
+            .eq('status', 'Ativo');
+
+          // Garantir que data é um array
+          const referrerMembersFullArray = Array.isArray(referrerMembersFull) ? referrerMembersFull : (referrerMembersFull ? [referrerMembersFull] : []);
+          
+          // Filtrar membros não excluídos no frontend
+          referrerMember = referrerMembersFullArray.filter(m => !m.deleted_at)?.[0] as any;
+        }
+
+        if (referrerError) {
+          // Erro ao buscar referrer
+          console.error('Erro ao buscar referrer:', referrerError);
+          return;
+        }
+      }
+
+      if (!referrerMember) {
+        // Referrer não encontrado - não lançar erro, apenas retornar
+        console.warn('Referrer não encontrado:', referrerName, memberId ? `ID: ${memberId}` : '');
+        return;
+      }
+
+      // Contar amigos ativos cadastrados por este membro
+      // Priorizar busca por member_id se disponível
+      let friendsData: any[] = [];
+      let friendsError: any = null;
+
+      if (referrerMember.id) {
+        // Buscar por member_id (mais preciso)
+        const { data: friendsByMemberId, error: friendsErrorById } = await supabaseServerless
+          .from('friends')
+          .select('id, deleted_at, status, member_id')
+          .eq('member_id', referrerMember.id)
+          .eq('status', 'Ativo')
+          .is('deleted_at', null);
+        
+        friendsData = Array.isArray(friendsByMemberId) ? friendsByMemberId : (friendsByMemberId ? [friendsByMemberId] : []);
+        friendsError = friendsErrorById;
+      }
+
+      // Se não encontrou por member_id, buscar por referrer (nome) como fallback
+      if (friendsData.length === 0) {
+        const { data: friendsByReferrer, error: friendsErrorByReferrer } = await supabaseServerless
+          .from('friends')
+          .select('id, deleted_at, status, member_id')
+          .eq('referrer', referrerName)
+          .eq('status', 'Ativo');
+        
+        const friendsByReferrerArray = Array.isArray(friendsByReferrer) ? friendsByReferrer : (friendsByReferrer ? [friendsByReferrer] : []);
+        friendsData = friendsByReferrerArray.filter(f => !f.deleted_at);
+        if (friendsErrorByReferrer) {
+          friendsError = friendsErrorByReferrer;
+        }
+      } else {
+        // Filtrar amigos não excluídos no frontend (garantir)
+        friendsData = friendsData.filter(f => !f.deleted_at);
+      }
+
+      if (friendsError) {
+        // Erro ao contar amigos
+        console.error('Erro ao contar amigos:', friendsError);
+        return;
+      }
+
+      const friendsCount = friendsData.length;
+      const currentContracts = referrerMember.contracts_completed;
+
+      console.log('📊 Friends count encontrado:', friendsCount, 'Contracts atuais:', currentContracts);
+
+      // Atualizar contracts_completed
+      // Atualizando contratos após cadastro
+      
+      const { error: updateError } = await supabaseServerless
+        .from('members')
+        .update({ 
+          contracts_completed: friendsCount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', referrerMember.id);
+
+      if (updateError) {
+        // Erro ao atualizar contratos do membro
+        console.error('❌ Erro ao atualizar contratos:', updateError);
+        return;
+      }
+
+      console.log('✅ Contracts atualizado para:', friendsCount);
+
+      // Atualizar ranking e status
+      console.log('🔄 Atualizando ranking e status...');
+      await updateMemberRankingAndStatus(referrerMember.id, friendsCount);
+      console.log('✅ Ranking e status atualizados!');
+      
+
     } catch (err) {
-      console.warn('Erro ao executar ranking automático:', err);
+      // Erro ao atualizar contadores após cadastro
+      console.error('Erro ao atualizar contadores:', err);
     }
-  }
+  };
 
   // Função de validação do Instagram do parceiro
   const handleCoupleInstagramBlur = async () => {
     if (!formData.couple_instagram.trim()) {
       setIsCoupleInstagramValid(false);
       setCoupleInstagramValidationError(null);
-      return;
-    }
+        return;
+      }
 
     // Primeiro verificar com a nova validação
     const coupleInstagramError = validateInstagramBasic(formData.couple_instagram);
@@ -596,10 +730,14 @@ export default function PublicRegister() {
         errors.couple_instagram = 'O Instagram do parceiro não pode ser igual ao seu Instagram';
       }
 
-      // Verificar duplicatas com membros existentes
-      const { data: membersData, error: membersError } = await supabase
+      // Obter campanha do link atual para validar
+      const currentCampaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+      const currentCampaignId = (linkData as any)?.campaign_id || (referrerData as any)?.campaign_id || null;
+
+      // Verificar duplicatas com membros existentes (em TODAS as campanhas para validar)
+      const { data: membersData, error: membersError } = await supabaseServerless
         .from('members')
-        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign')
+        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign, campaign_id')
         .eq('status', 'Ativo')
         .is('deleted_at', null);
 
@@ -608,10 +746,10 @@ export default function PublicRegister() {
         return errors;
       }
 
-      // Verificar duplicatas com amigos existentes
-      const { data: friendsData, error: friendsError } = await supabase
+      // Verificar duplicatas com amigos existentes (em TODAS as campanhas para validar)
+      const { data: friendsData, error: friendsError } = await supabaseServerless
         .from('friends')
-        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign')
+        .select('name, phone, instagram, couple_name, couple_phone, couple_instagram, campaign, campaign_id')
         .eq('status', 'Ativo')
         .is('deleted_at', null);
 
@@ -620,59 +758,86 @@ export default function PublicRegister() {
         return errors;
       }
 
-      // Combinar dados de membros e amigos - VERIFICAR TODAS AS CAMPANHAS
-
+      // Combinar dados de membros e amigos
       const allUsers = [...(membersData || []), ...(friendsData || [])];
 
-
-      // Verificar duplicatas
+      // Verificar duplicatas e validação de campanha
       for (const user of allUsers) {
+        // Verificar se o usuário está em OUTRA campanha
+        const userCampaignCode = user.campaign;
+        const userCampaignId = (user as any).campaign_id;
+        const isDifferentCampaign = (
+          (currentCampaignId && userCampaignId && currentCampaignId !== userCampaignId) ||
+          (currentCampaignId && !userCampaignId) ||
+          (!currentCampaignId && userCampaignId) ||
+          (!currentCampaignId && !userCampaignId && currentCampaignCode !== userCampaignCode)
+        );
         const userPhone = user.phone?.replace(/\D/g, '') || '';
         const userCouplePhone = user.couple_phone?.replace(/\D/g, '') || '';
         const userInstagram = user.instagram?.toLowerCase() || '';
         const userCoupleInstagram = user.couple_instagram?.toLowerCase() || '';
 
-        // Verificar se é uma duplicata completa (mesmo telefone E mesmo Instagram)
-        if (userPhone === normalizedPhone && userInstagram === formData.instagram.toLowerCase()) {
-          errors.phone = `Usuário já cadastrado com este telefone e Instagram`;
-          errors.instagram = `Usuário já cadastrado com este telefone e Instagram`;
-          break; // Parar já que encontrou duplicata completa
-        }
+        // VALIDAÇÃO: Se está em OUTRA campanha, bloquear cadastro
+        if (isDifferentCampaign) {
+          // Verificar se é uma duplicata completa (mesmo telefone E mesmo Instagram) em OUTRA campanha
+          if (userPhone === normalizedPhone && userInstagram === formData.instagram.toLowerCase()) {
+            errors.phone = `Este telefone e Instagram já estão cadastrados na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+            errors.instagram = `Este telefone e Instagram já estão cadastrados na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+            break; // Parar já que encontrou duplicata completa em outra campanha
+          }
 
-        // Verificar se é uma duplicata completa da segunda pessoa
-        if (userCouplePhone === normalizedCouplePhone && userCoupleInstagram === formData.couple_instagram.toLowerCase()) {
-          errors.couple_phone = `Usuário já cadastrado com este telefone e Instagram`;
-          errors.couple_instagram = `Usuário já cadastrado com este telefone e Instagram`;
-          break; // Parar já que encontrou duplicata completa
-        }
+          // Verificar se é uma duplicata completa da segunda pessoa em OUTRA campanha
+          if (userCouplePhone === normalizedCouplePhone && userCoupleInstagram === formData.couple_instagram.toLowerCase()) {
+            errors.couple_phone = `Este telefone e Instagram do parceiro já estão cadastrados na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+            errors.couple_instagram = `Este telefone e Instagram do parceiro já estão cadastrados na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+            break; // Parar já que encontrou duplicata completa em outra campanha
+          }
 
-        // Verificar telefone principal independente (apenas se não for duplicata completa)
-        if (userPhone === normalizedPhone && !errors.phone) {
-          errors.phone = `Este telefone já está cadastrado`;
-        }
+          // Verificar telefone principal em OUTRA campanha
+          if (userPhone === normalizedPhone && !errors.phone) {
+            errors.phone = `Este telefone já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
 
-        // Verificar telefone do parceiro (apenas se não for duplicata completa)
-        if (userPhone === normalizedCouplePhone && !errors.couple_phone) {
-          errors.couple_phone = `Este telefone já está cadastrado`;
-        }
-        if (userCouplePhone === normalizedCouplePhone && !errors.couple_phone) {
-          errors.couple_phone = `Este telefone já está cadastrado`;
-        }
+          // Verificar telefone do parceiro em OUTRA campanha
+          if (userPhone === normalizedCouplePhone && !errors.couple_phone) {
+            errors.couple_phone = `Este telefone do parceiro já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
+          if (userCouplePhone === normalizedCouplePhone && !errors.couple_phone) {
+            errors.couple_phone = `Este telefone do parceiro já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
 
-        // Verificar Instagram principal (apenas se não for duplicata completa)
-        if (userInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
-          errors.instagram = `Este Instagram já está cadastrado`;
-        }
+          // Verificar Instagram principal em OUTRA campanha
+          if (userInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
+            errors.instagram = `Este Instagram já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
 
-        // Verificar Instagram do parceiro (apenas se não for duplicata completa)
-        if (userInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
-          errors.couple_instagram = `Este Instagram já está cadastrado`;
-        }
-        if (userCoupleInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
-          errors.couple_instagram = `Este Instagram já está cadastrado`;
-        }
-        if (userCoupleInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
-          errors.instagram = `Este Instagram já está cadastrado`;
+          // Verificar Instagram do parceiro em OUTRA campanha
+          if (userInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
+            errors.couple_instagram = `Este Instagram do parceiro já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
+          if (userCoupleInstagram === formData.couple_instagram.toLowerCase() && !errors.couple_instagram) {
+            errors.couple_instagram = `Este Instagram do parceiro já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
+          if (userCoupleInstagram === formData.instagram.toLowerCase() && !errors.instagram) {
+            errors.instagram = `Este Instagram já está cadastrado na campanha ${userCampaignCode || 'outra'}. Não é possível cadastrar em outra campanha.`;
+          }
+        } else {
+          // Se está na MESMA campanha, permitir duplicatas (já que pode ser um novo cadastro)
+          // Mas ainda verificar duplicatas completas para evitar cadastros duplicados na mesma campanha
+          
+          // Verificar se é uma duplicata completa (mesmo telefone E mesmo Instagram)
+          if (userPhone === normalizedPhone && userInstagram === formData.instagram.toLowerCase()) {
+            errors.phone = `Usuário já cadastrado com este telefone e Instagram nesta campanha`;
+            errors.instagram = `Usuário já cadastrado com este telefone e Instagram nesta campanha`;
+            break; // Parar já que encontrou duplicata completa
+          }
+
+          // Verificar se é uma duplicata completa da segunda pessoa
+          if (userCouplePhone === normalizedCouplePhone && userCoupleInstagram === formData.couple_instagram.toLowerCase()) {
+            errors.couple_phone = `Usuário já cadastrado com este telefone e Instagram nesta campanha`;
+            errors.couple_instagram = `Usuário já cadastrado com este telefone e Instagram nesta campanha`;
+            break; // Parar já que encontrou duplicata completa
+          }
         }
       }
 
@@ -691,13 +856,14 @@ export default function PublicRegister() {
     
     // Lista de nomes genéricos/fake que devem ser bloqueados
     const blockedNames = [
-      'insta', 'instagram', 'seminsta', 'ainstao', 'naotem', 'seminsta', 'aaaaaaa', 
+      'insta', 'instagram', 'seminsta', 'ainstao', 'naotem', 'seminsta', 'seminstram', 'aaaaaaa', 
       'instanao', 'naotenhoinsta', 'nãotenhoinstragram', 'instanaotem', 'asdadd', 
       'aaaa', 'bbbbb', 'nao', 'tem', 'insta', 'sem', 'não', 'tenho', 'aaaaa', 
       'bbbb', 'cccc', 'dddd', 'eeee', 'ffff', 'gggg', 'hhhh', 'iiii', 'jjjj',
       'kkkk', 'llll', 'mmmm', 'nnnn', 'oooo', 'pppp', 'qqqq', 'rrrr', 'ssss',
       'tttt', 'uuuu', 'vvvv', 'wwww', 'xxxx', 'yyyy', 'zzzz', 'teste', 'test',
-      'usuario', 'user', 'nome', 'name', 'exemplo', 'example', 'fake', 'falso'
+      'usuario', 'user', 'nome', 'name', 'exemplo', 'example', 'fake', 'falso',
+      'naoteminsta', 'seminsta', 'seminstram', 'naotem', 'sem', 'não', 'tem'
     ];
     
     // Verificar se é um nome bloqueado
@@ -720,6 +886,30 @@ export default function PublicRegister() {
       return 'Instagram não pode ter muitos caracteres repetidos.';
     }
     
+    // Verificar se tem muitos números consecutivos (mais de 6 números seguidos)
+    if (/\d{7,}/.test(instagramClean)) {
+      return 'Instagram não pode ter muitos números consecutivos.';
+    }
+    
+    // Verificar se parece com número de telefone (padrões comuns)
+    if (/^(\d{2,3})?\d{4,5}\d{4}$/.test(instagramClean) || 
+        /^\d{10,11}$/.test(instagramClean) ||
+        /^\(\d{2,3}\)\s?\d{4,5}-?\d{4}$/.test(instagramClean)) {
+      return 'Instagram não pode ser um número de telefone.';
+    }
+    
+    // Verificar se tem muitas letras iguais consecutivas (mais de 3)
+    if (/([a-z])\1{3,}/.test(instagramClean)) {
+      return 'Instagram não pode ter muitas letras iguais consecutivas.';
+    }
+    
+    // Verificar se é principalmente números (mais de 70% números)
+    const numberCount = (instagramClean.match(/\d/g) || []).length;
+    const totalLength = instagramClean.length;
+    if (numberCount / totalLength > 0.7) {
+      return 'Instagram deve ter mais letras que números.';
+    }
+    
     return null;
   };
 
@@ -738,7 +928,7 @@ export default function PublicRegister() {
     } else if (!validatePhone(formData.phone)) {
       const cleanPhone = formData.phone.replace(/\D/g, '');
       if (cleanPhone.length !== 11) {
-        errors.phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      errors.phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
       } else {
         const ddd = parseInt(cleanPhone.substring(0, 2));
         if (ddd < 11 || ddd > 99) {
@@ -760,9 +950,9 @@ export default function PublicRegister() {
         errors.instagram = instagramError;
       } else {
         // Validação adicional (formato, etc.)
-        const instagramValidation = await validateInstagram(formData.instagram);
-        if (!instagramValidation.isValid) {
-          errors.instagram = instagramValidation.error || 'Instagram inválido';
+      const instagramValidation = await validateInstagram(formData.instagram);
+      if (!instagramValidation.isValid) {
+        errors.instagram = instagramValidation.error || 'Instagram inválido';
         }
       }
     }
@@ -795,7 +985,7 @@ export default function PublicRegister() {
     } else if (!validatePhone(formData.couple_phone)) {
       const cleanPhone = formData.couple_phone.replace(/\D/g, '');
       if (cleanPhone.length !== 11) {
-        errors.couple_phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
+      errors.couple_phone = 'WhatsApp deve ter 11 dígitos (DDD + 9 dígitos)';
       } else {
         const ddd = parseInt(cleanPhone.substring(0, 2));
         if (ddd < 11 || ddd > 99) {
@@ -817,9 +1007,9 @@ export default function PublicRegister() {
         errors.couple_instagram = coupleInstagramError;
       } else {
         // Validação adicional (formato, etc.)
-        const coupleInstagramValidation = await validateInstagram(formData.couple_instagram);
-        if (!coupleInstagramValidation.isValid) {
-          errors.couple_instagram = coupleInstagramValidation.error || 'Instagram inválido';
+      const coupleInstagramValidation = await validateInstagram(formData.couple_instagram);
+      if (!coupleInstagramValidation.isValid) {
+        errors.couple_instagram = coupleInstagramValidation.error || 'Instagram inválido';
         }
       }
     }
@@ -851,8 +1041,13 @@ export default function PublicRegister() {
   const handleInputChange = (field: string, value: string) => {
     let processedValue = value;
     
-    if (field === 'phone' || field === 'couple_phone') {
+    if (field === 'phone' || field === 'couple_phone' || field === 'referrer_phone') {
       processedValue = formatPhone(value);
+    } else if (field === 'referrer_name') {
+      // Permite apenas letras e espaços (sem números)
+      processedValue = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '');
+      // Aplica formatação: primeira letra maiúscula de cada palavra
+      processedValue = formatName(processedValue);
     } else if (field === 'instagram' || field === 'couple_instagram') {
       // Remove espaços completamente
       processedValue = value.replace(/\s/g, '');
@@ -930,19 +1125,38 @@ export default function PublicRegister() {
         } else {
           // VERIFICAR SE TEM ERRO DE DESATIVAÇÃO OU LINK NÃO ENCONTRADO
           if (result.error) {
-            const errorMessage = result.error;
+            const errorMessage = result.error.toLowerCase();
             
+            // Só marcar como desativado se for especificamente sobre desativação
+            // "não encontrado" não deve bloquear links recém-criados - pode ser timing
             if (errorMessage.includes('desativado') || 
-                errorMessage.includes('inativo') || 
-                errorMessage.includes('não encontrado') ||
-                errorMessage.includes('não está mais disponível')) {
+                (errorMessage.includes('inativo') && !errorMessage.includes('não encontrado'))) {
               setIsLinkDeactivated(true);
-              setLinkDeactivationMessage(
-                errorMessage.includes('não encontrado') 
-                  ? 'Este link não foi encontrado ou não está mais disponível.' 
-                  : errorMessage
-              );
+              setLinkDeactivationMessage(result.error);
               return; // NÃO fazer fallback
+            }
+            
+            // Se for "não encontrado", tentar novamente após um pequeno delay
+            // (pode ser um link recém-criado ainda não replicado)
+            if (errorMessage.includes('não encontrado') || errorMessage.includes('link não encontrado')) {
+              // Tentar novamente após 500ms (para links recém-criados)
+              setTimeout(async () => {
+                const retryResult = await getUserByLinkId(linkId);
+                if (retryResult.success && retryResult.data) {
+                  setLinkData(retryResult.data);
+                  setReferrerData(retryResult.data.user_data);
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    referrer: retryResult.data.user_data?.full_name || retryResult.data.user_data?.name || 'Usuário do Sistema' 
+                  }));
+                  await incrementClickCount(linkId);
+                } else {
+                  // Se ainda não encontrou após retry, marcar como não encontrado
+                  setIsLinkDeactivated(true);
+                  setLinkDeactivationMessage('Este link não foi encontrado ou não está mais disponível.');
+                }
+              }, 500);
+              return;
             }
           }
           
@@ -966,8 +1180,8 @@ export default function PublicRegister() {
           return; // NÃO fazer fallback
         } else {
           // Outro tipo de erro - fallback normal
-          setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
-        }
+        setFormData(prev => ({ ...prev, referrer: 'Usuário do Sistema' }));
+      }
       }
   }, [linkId, getUserByLinkId, incrementClickCount, navigate]);
 
@@ -995,6 +1209,155 @@ export default function PublicRegister() {
     try {
       setIsLoading(true);
       
+      // 🔍 VALIDAÇÃO FLEXÍVEL - verificar campos vazios e validar apenas o que precisa
+      const validationErrors: Record<string, string> = {};
+      
+      // Verificar campos vazios e validar apenas se necessário
+      // Primeira pessoa
+      if (!formData.name.trim()) {
+        if (!memberData.name.trim()) {
+          validationErrors.name = 'Nome é obrigatório';
+        } else {
+          // Se está vazio no form mas tem no banco, manter o do banco
+          formData.name = memberData.name;
+        }
+      }
+      
+      if (!formData.phone.trim()) {
+        if (!memberData.phone.trim()) {
+          validationErrors.phone = 'WhatsApp é obrigatório';
+        } else {
+          formData.phone = memberData.phone;
+        }
+      }
+      
+      if (!formData.instagram.trim()) {
+        if (!memberData.instagram.trim()) {
+          validationErrors.instagram = 'Instagram é obrigatório';
+        } else {
+          formData.instagram = memberData.instagram;
+        }
+      }
+      
+      if (!formData.cep.trim()) {
+        if (!memberData.cep.trim()) {
+          validationErrors.cep = 'CEP é obrigatório';
+        } else {
+          formData.cep = memberData.cep;
+        }
+      }
+      
+      if (!formData.city.trim()) {
+        if (!memberData.city.trim()) {
+          validationErrors.city = 'Cidade é obrigatória';
+        } else {
+          formData.city = memberData.city;
+        }
+      }
+      
+      if (!formData.sector.trim()) {
+        if (!memberData.sector.trim()) {
+          validationErrors.sector = 'Setor é obrigatório';
+        } else {
+          formData.sector = memberData.sector;
+        }
+      }
+      
+      // Segunda pessoa (couple)
+      if (!formData.couple_name.trim()) {
+        if (!memberData.couple_name.trim()) {
+          validationErrors.couple_name = 'Nome do parceiro é obrigatório';
+        } else {
+          formData.couple_name = memberData.couple_name;
+        }
+      }
+      
+      if (!formData.couple_phone.trim()) {
+        if (!memberData.couple_phone.trim()) {
+          validationErrors.couple_phone = 'WhatsApp do parceiro é obrigatório';
+        } else {
+          formData.couple_phone = memberData.couple_phone;
+        }
+      }
+      
+      if (!formData.couple_instagram.trim()) {
+        if (!memberData.couple_instagram.trim()) {
+          validationErrors.couple_instagram = 'Instagram do parceiro é obrigatório';
+        } else {
+          formData.couple_instagram = memberData.couple_instagram;
+        }
+      }
+      
+      if (!formData.couple_cep.trim()) {
+        if (!memberData.couple_cep.trim()) {
+          validationErrors.couple_cep = 'CEP do parceiro é obrigatório';
+        } else {
+          formData.couple_cep = memberData.couple_cep;
+        }
+      }
+      
+      if (!formData.couple_city.trim()) {
+        if (!memberData.couple_city.trim()) {
+          validationErrors.couple_city = 'Cidade do parceiro é obrigatória';
+        } else {
+          formData.couple_city = memberData.couple_city;
+        }
+      }
+      
+      if (!formData.couple_sector.trim()) {
+        if (!memberData.couple_sector.trim()) {
+          validationErrors.couple_sector = 'Setor do parceiro é obrigatório';
+        } else {
+          formData.couple_sector = memberData.couple_sector;
+        }
+      }
+      
+      // Se há erros de validação, mostrar e parar
+      if (Object.keys(validationErrors).length > 0) {
+        setFormErrors(validationErrors);
+        toast({
+          title: "Campos obrigatórios",
+          description: "Por favor, preencha todos os campos obrigatórios.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Verificar se há mudanças reais para atualizar
+      const hasChanges = 
+        memberData.name !== formData.name ||
+        memberData.phone !== formData.phone ||
+        memberData.instagram !== formData.instagram ||
+        memberData.cep !== formData.cep ||
+        memberData.city !== formData.city ||
+        memberData.sector !== formData.sector ||
+        memberData.couple_name !== formData.couple_name ||
+        memberData.couple_phone !== formData.couple_phone ||
+        memberData.couple_instagram !== formData.couple_instagram ||
+        memberData.couple_cep !== formData.couple_cep ||
+        memberData.couple_city !== formData.couple_city ||
+        memberData.couple_sector !== formData.couple_sector;
+      
+      // Se não há mudanças, apenas salvar (atualizar timestamp)
+      if (!hasChanges) {
+        // Atualizar apenas o timestamp para indicar que foi "atualizado"
+        const { error } = await supabaseServerless
+          .from(isMember ? 'members' : 'friends')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', memberData.id);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Dados atualizados!",
+          description: "Nenhuma alteração foi detectada, mas os dados foram atualizados com sucesso.",
+          variant: "default",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
       // Determinar qual tabela atualizar
       const tableName = isMember ? 'members' : 'friends';
       
@@ -1017,7 +1380,7 @@ export default function PublicRegister() {
       };
       
       // Fazer update no banco
-      const { error } = await supabase
+      const { error } = await supabaseServerless
         .from(tableName)
         .update(updateData)
         .eq('id', memberData.id);
@@ -1033,7 +1396,7 @@ export default function PublicRegister() {
       
       // Tentar buscar pelo nome primeiro
       try {
-        const { data: nameData, error: nameError } = await supabase
+        const { data: nameData, error: nameError } = await supabaseServerless
           .from('auth_users')
           .select('*')
           .eq('name', memberData.name)
@@ -1043,7 +1406,7 @@ export default function PublicRegister() {
           authUserData = nameData;
         } else {
           // Se não encontrar pelo nome, tentar pelo telefone
-          const { data: phoneData, error: phoneError } = await supabase
+          const { data: phoneData, error: phoneError } = await supabaseServerless
             .from('auth_users')
             .select('*')
             .eq('phone', memberData.phone)
@@ -1053,7 +1416,7 @@ export default function PublicRegister() {
             authUserData = phoneData;
           } else {
             // Se não encontrar pelo telefone, tentar pelo Instagram
-            const { data: instagramData, error: instagramError } = await supabase
+            const { data: instagramData, error: instagramError } = await supabaseServerless
               .from('auth_users')
               .select('*')
               .eq('instagram', memberData.instagram)
@@ -1088,20 +1451,20 @@ export default function PublicRegister() {
         const newPassword = phoneNumber;
         
         // Preparar dados para atualização
+        const firstName = formData.name.split(' ')[0]; // Pegar apenas o primeiro nome
         const updateData = {
           username: newUsername,
           password: newPassword,
           name: formData.name,
           phone: formData.phone,
           instagram: formData.instagram,
-          display_name: formData.name.toLowerCase(),
           full_name: `${formData.name} - ${isMember ? 'Membro' : 'Amigo'}`,
           updated_at: new Date().toISOString()
         };
         
         
         // Atualizar auth_users
-        const { error: authError } = await supabase
+        const { error: authError } = await supabaseServerless
           .from('auth_users')
           .update(updateData)
           .eq('id', authUserData.id);
@@ -1111,6 +1474,21 @@ export default function PublicRegister() {
           throw authError;
         }
         
+        // 🔄 ATUALIZAR LOCALSTORAGE com os novos dados
+        try {
+          const updatedUserData = {
+            ...authUserData,
+            name: formData.name,
+            full_name: `${formData.name} - ${isMember ? 'Membro' : 'Amigo'}`,
+            phone: formData.phone,
+            instagram: formData.instagram,
+            username: newUsername
+          };
+          
+          localStorage.setItem('loggedUser', JSON.stringify(updatedUserData));
+        } catch (localStorageError) {
+          console.error('❌ Erro ao atualizar localStorage:', localStorageError);
+        }
         
         newCredentials = {
           username: newUsername,
@@ -1118,7 +1496,89 @@ export default function PublicRegister() {
         };
       }
       
-      // Mostrar tela de sucesso com novas credenciais
+      // 🔄 ATUALIZAR TABELA USERS (se existir)
+      try {
+        const { data: usersData, error: usersError } = await supabaseServerless
+          .from('users')
+          .select('*')
+          .eq('name', memberData.name)
+          .or(`phone.eq.${memberData.phone},instagram.eq.${memberData.instagram}`)
+          .limit(1);
+        
+        if (usersData && usersData.length > 0 && !usersError) {
+          const userToUpdate = usersData[0];
+          
+          // Preparar dados para atualização da tabela users
+          const usersUpdateData = {
+            name: formData.name,
+            phone: formData.phone,
+            instagram: formData.instagram,
+            city: formData.city,
+            updated_at: new Date().toISOString()
+          };
+          
+          const { error: updateUsersError } = await supabaseServerless
+            .from('users')
+            .update(usersUpdateData)
+            .eq('id', userToUpdate.id);
+          
+          if (updateUsersError) {
+            console.error('❌ Erro ao atualizar tabela users:', updateUsersError);
+          } else {
+          }
+        }
+      } catch (usersUpdateError) {
+        console.error('❌ Erro na atualização da tabela users:', usersUpdateError);
+      }
+      
+      // 🔄 ATUALIZAR TABELA USER_LINKS (se existir)
+      try {
+        const { data: userLinksData, error: userLinksError } = await supabaseServerless
+          .from('user_links')
+          .select('*')
+          .eq('referrer_name', memberData.name)
+          .or(`referrer_phone.eq.${memberData.phone},referrer_instagram.eq.${memberData.instagram}`)
+          .limit(10); // Pode haver múltiplos links
+        
+        if (userLinksData && userLinksData.length > 0 && !userLinksError) {
+          // Atualizar todos os links encontrados
+          for (const link of userLinksData) {
+            const userLinksUpdateData = {
+              referrer_name: formData.name,
+              referrer_phone: formData.phone,
+              referrer_instagram: formData.instagram,
+              updated_at: new Date().toISOString()
+            };
+            
+            const { error: updateUserLinksError } = await supabaseServerless
+              .from('user_links')
+              .update(userLinksUpdateData)
+              .eq('id', link.id);
+            
+            if (updateUserLinksError) {
+              console.error('❌ Erro ao atualizar user_links:', updateUserLinksError);
+            } else {
+            }
+          }
+        }
+      } catch (userLinksUpdateError) {
+        console.error('❌ Erro na atualização da tabela user_links:', userLinksUpdateError);
+      }
+      
+      // Verificar se Instagram ou telefone foram alterados
+      const instagramChanged = memberData.instagram !== formData.instagram;
+      const phoneChanged = memberData.phone !== formData.phone;
+      const credentialsChanged = instagramChanged || phoneChanged;
+      
+      if (credentialsChanged && newCredentials) {
+        // Se as credenciais mudaram, mostrar tela de sucesso com novas credenciais
+        setCredentialsChanged(true);
+        setIsSuccess(true);
+        setUserCredentials(newCredentials);
+        return; // Sair da função aqui para mostrar tela de sucesso
+      }
+      
+      // Mostrar tela de sucesso com novas credenciais (caso não tenha feito login automático)
       setIsSuccess(true);
       setUserCredentials(newCredentials);
       
@@ -1184,7 +1644,7 @@ export default function PublicRegister() {
       // É cadastro de amigo?
       
       // Verificar configuração atual do sistema
-      const { data: currentSettings, error: settingsError } = await supabase
+      const { data: currentSettings, error: settingsError } = await supabaseServerless
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'member_links_type')
@@ -1211,6 +1671,117 @@ export default function PublicRegister() {
         // CADASTRO DE AMIGO (CADASTRO ESPECIAL) - Usar tabela friends
         // Cadastrando amigo (cadastro especial)
         
+        // Usar campaign_id diretamente do link e buscar o código real da campanha
+        const friendCampaignId = (linkData as any)?.campaign_id || (referrerData as any)?.campaign_id || null;
+        let friendCampaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+        
+        console.log('🔍 Campaign_id do link para amigo:', friendCampaignId);
+        console.log('🔍 Campaign code inicial do link:', friendCampaignCode);
+        
+        // Se tiver campaign_id, buscar o código real da campanha usando select direto
+        if (friendCampaignId) {
+          try {
+            const result = await supabaseServerless.select('campaigns', {
+              select: 'code',
+              filters: { id: friendCampaignId },
+              limit: 1
+            });
+            
+            if (!result.error && result.data) {
+              const campaignData = Array.isArray(result.data) ? result.data[0] : result.data;
+              const code = (campaignData as any)?.code;
+              if (code) {
+                friendCampaignCode = code;
+                console.log('✅ Código da campanha encontrado para amigo:', friendCampaignCode);
+              } else {
+                console.warn('⚠️ Código não encontrado na resposta. Usando o código do link:', friendCampaignCode);
+              }
+            } else {
+              console.warn('⚠️ Não foi possível buscar o código da campanha. Usando o código do link:', friendCampaignCode);
+            }
+          } catch (err) {
+            console.warn('⚠️ Erro ao buscar código da campanha. Usando o código do link:', friendCampaignCode);
+          }
+        } else {
+          console.warn('⚠️ Campaign_id não encontrado no link. Tentando cadastrar amigo sem campaign_id...');
+        }
+        
+        // Buscar o member_id do membro dono do link
+        let memberIdForFriend = '';
+        if (linkData?.user_id) {
+          try {
+            console.log('🔍 Buscando member_id para user_id:', linkData.user_id);
+            
+            // Extrair nome simples (sem sufixos)
+            const extractSimpleName = (fullName: string): string => {
+              return fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+            };
+            
+            // Tentar usar o nome do referrerData que já está disponível
+            let searchName = '';
+            if (referrerData) {
+              // Tentar full_name primeiro, depois name
+              const referrerFullName = (referrerData as any)?.full_name || (referrerData as any)?.name;
+              if (referrerFullName) {
+                searchName = extractSimpleName(referrerFullName);
+                console.log('🔍 Tentando buscar membro pelo nome do referrerData:', searchName);
+              }
+            }
+            
+            if (!searchName) {
+              // Se não tiver referrerData, buscar do auth_users
+              const { data: authUserData } = await supabaseServerless
+                .from('auth_users')
+                .select('name')
+                .eq('id', linkData.user_id)
+                .single();
+              
+              if (authUserData && typeof authUserData === 'object' && 'name' in authUserData && authUserData.name) {
+                searchName = extractSimpleName(String(authUserData.name));
+                console.log('🔍 Tentando buscar membro pelo nome do auth_users:', searchName);
+              }
+            }
+            
+            if (searchName) {
+              // Tentar busca exata primeiro
+              let { data: memberData } = await supabaseServerless
+                .from('members')
+                .select('id')
+                .eq('name', searchName)
+                .eq('status', 'Ativo')
+                .is('deleted_at', null)
+                .limit(1);
+              
+              // Se não encontrou, tentar case-insensitive com ILIKE
+              if (!memberData || !Array.isArray(memberData) || memberData.length === 0) {
+                console.log('🔍 Busca exata falhou, tentando case-insensitive...');
+                const { data: memberDataCaseInsensitive } = await supabaseServerless
+                  .from('members')
+                  .select('id')
+                  .ilike('name', searchName)
+                  .eq('status', 'Ativo')
+                  .is('deleted_at', null)
+                  .limit(1);
+                
+                memberData = memberDataCaseInsensitive;
+              }
+              
+              if (memberData && Array.isArray(memberData) && memberData.length > 0) {
+                memberIdForFriend = memberData[0].id;
+                console.log('✅ Member ID encontrado para amigo:', memberIdForFriend);
+              } else {
+                console.log('⚠️ Membro não encontrado na tabela members com o nome:', searchName);
+              }
+            } else {
+              console.warn('⚠️ Nome do referrer não disponível para busca');
+            }
+          } catch (err) {
+            console.warn('⚠️ Erro ao buscar member_id do link, o hook tentará buscar:', err);
+          }
+        } else {
+          console.warn('⚠️ LinkData ou user_id não disponível');
+        }
+        
         // Preparar dados do amigo para tabela friends
         const friendData = {
           name: formData.name.trim(),
@@ -1222,7 +1793,8 @@ export default function PublicRegister() {
           referrer: formData.referrer,
           registration_date: new Date().toISOString().split('T')[0],
           status: 'Ativo' as const,
-          campaign: linkData?.campaign || referrerData?.campaign || 'A', // Usar campanha do link primeiro, depois referrer, depois padrão A
+          campaign: friendCampaignCode,
+          campaign_id: friendCampaignId, // Usar campaign_id ao invés de apenas campaign (texto)
           // Dados do parceiro (obrigatório)
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
@@ -1231,7 +1803,7 @@ export default function PublicRegister() {
           couple_city: formData.couple_city.trim(),
           couple_sector: formData.couple_sector.trim(),
           // Campos obrigatórios para tabela friends
-          member_id: '', // Será preenchido pelo hook
+          member_id: memberIdForFriend, // Usar member_id do link se encontrado
           deleted_at: null
         };
 
@@ -1248,9 +1820,11 @@ export default function PublicRegister() {
         setIsSuccess(true);
         
         // Atualizar contadores do membro referrer após cadastro bem-sucedido
-        if (formData.referrer) {
-          // Atualizando contadores do membro após cadastro
-          await updateMemberCountersAfterRegistration(formData.referrer);
+        if (memberIdForFriend || formData.referrer) {
+          console.log('🔄 Atualizando contadores do membro após cadastro de amigo...');
+          // Atualizando contadores do membro após cadastro (usar member_id se disponível)
+          await updateMemberCountersAfterRegistration(formData.referrer, memberIdForFriend);
+          console.log('✅ Contadores atualizados com sucesso!');
         }
         
         toast({
@@ -1262,28 +1836,64 @@ export default function PublicRegister() {
         // CADASTRO DE MEMBRO (NORMAL)
         // Cadastrando membro
         
+        // Usar campaign_id diretamente do link e buscar o código real da campanha
+        const campaignId = (linkData as any)?.campaign_id || (referrerData as any)?.campaign_id || null;
+        let campaignCode = linkData?.campaign || referrerData?.campaign || 'A';
+        
+        console.log('🔍 Campaign_id do link:', campaignId);
+        console.log('🔍 Campaign code inicial do link:', campaignCode);
+        
+        // Se tiver campaign_id, buscar o código real da campanha usando select direto
+        if (campaignId) {
+          try {
+            const result = await supabaseServerless.select('campaigns', {
+              select: 'code',
+              filters: { id: campaignId },
+              limit: 1
+            });
+            
+            if (!result.error && result.data) {
+              const campaignData = Array.isArray(result.data) ? result.data[0] : result.data;
+              const code = (campaignData as any)?.code;
+              if (code) {
+                campaignCode = code;
+                console.log('✅ Código da campanha encontrado:', campaignCode);
+              } else {
+                console.warn('⚠️ Código não encontrado na resposta. Usando o código do link:', campaignCode);
+              }
+            } else {
+              console.warn('⚠️ Não foi possível buscar o código da campanha. Usando o código do link:', campaignCode);
+            }
+          } catch (err) {
+            console.warn('⚠️ Erro ao buscar código da campanha. Usando o código do link:', campaignCode);
+          }
+        } else {
+          console.warn('⚠️ Campaign_id não encontrado no link. Tentando cadastrar membro sem campaign_id...');
+        }
+        
         // Preparar dados para salvar no banco
         const memberData = {
           name: formData.name.trim(),
           phone: formData.phone,
           instagram: formData.instagram.trim(),
-          cep: formData.cep ? limparCep(formData.cep) : null, // ← Adicionar CEP limpo (somente números)
+          cep: formData.cep ? limparCep(formData.cep) : null,
           city: formData.city.trim(),
           sector: formData.sector.trim(),
           referrer: formData.referrer,
+          quemindicou: formData.referrer_name?.trim() || null,
+          telefonequemindicou: formData.referrer_phone || null,
           registration_date: new Date().toISOString().split('T')[0],
           status: 'Ativo' as const,
-          campaign: linkData?.campaign || referrerData?.campaign || 'A', // Usar campanha do link primeiro, depois referrer, depois padrão A
+          campaign: campaignCode,
+          campaign_id: campaignId, // Usar campaign_id ao invés de apenas campaign (texto)
           // Dados do parceiro (obrigatório)
           couple_name: formData.couple_name.trim(),
           couple_phone: formData.couple_phone,
           couple_instagram: formData.couple_instagram.trim(),
-          couple_cep: formData.couple_cep ? limparCep(formData.couple_cep) : null, // ← Adicionar CEP do parceiro
+          couple_cep: formData.couple_cep ? limparCep(formData.couple_cep) : null,
           couple_city: formData.couple_city.trim(),
           couple_sector: formData.couple_sector.trim()
         };
-
-        // Dados do membro a serem salvos
 
         // 1. Salvar membro na tabela members
         const memberResult = await addMember(memberData);
@@ -1302,41 +1912,114 @@ export default function PublicRegister() {
           referrer: formData.referrer,
           registration_date: new Date().toISOString().split('T')[0],
           status: 'Ativo' as const,
-          campaign: linkData?.campaign || referrerData?.campaign || 'A' // Usar campanha do link primeiro, depois referrer, depois padrão A
+          campaign: campaignCode
         };
 
         const userResult = await addUser(userData);
         
+        // addUser não é crítico - pode falhar se usuário já existir
         if (!userResult.success) {
-          // Aviso: Erro ao salvar na tabela users
+          // Aviso: Usuário já existe na tabela users ou erro não crítico
         }
 
-        // 3. Criar credenciais compartilhadas para a dupla
-        const userDataForCouple = {
-          ...userData,
+        // 4. Criar auth_user para o membro
+        const cleanInstagram = formData.instagram.replace('@', '').toLowerCase();
+        const memberAuthUser = {
+          username: `member_${cleanInstagram}_${Date.now()}`,
+          password: `temp_${Math.random().toString(36).slice(-10)}`, // Senha temporária (não será usada)
+          name: formData.name.trim(),
           full_name: `${formData.name} e ${formData.couple_name} - Dupla`,
-          display_name: `${formData.name} & ${formData.couple_name}`,
           role: 'Membro',
-          campaign: linkData?.campaign || referrerData?.campaign || 'A' // Usar campanha do link primeiro, depois referrer, depois padrão A
+          is_active: true, // Ativo por padrão
+          campaign: campaignCode,
+          campaign_id: campaignId,
+          phone: formData.phone,
+          instagram: formData.instagram.trim()
         };
-        
-        const credentialsResult = await createUserWithCredentials(userDataForCouple);
-        
-        if (!credentialsResult.success) {
-          throw new Error((credentialsResult as { error: string }).error);
+
+        const { data: createdAuthUser, error: authUserError } = await supabaseServerless
+          .from('auth_users')
+          .insert([memberAuthUser])
+          .select()
+          .single();
+
+        if (authUserError) {
+          throw new Error(`Erro ao criar conta para o membro: ${authUserError.message}`);
         }
 
-        // Armazenar as credenciais reais criadas
-        setUserCredentials({
-          username: credentialsResult.credentials.username,
-          password: credentialsResult.credentials.password
-        });
+        if (!createdAuthUser?.id) {
+          throw new Error('Erro ao criar conta para o membro: ID não retornado');
+        }
 
-        // 4. Sucesso - Membro cadastrado
+        // 5. Gerar link_id único baseado no nome do membro
+        let baseLinkId = generateLinkIdFromName(formData.name.trim());
+        let newLinkId = baseLinkId;
+        let linkIdCounter = 1;
+        const maxAttempts = 100; // Limite máximo de tentativas para evitar loop infinito
+        
+        // Verificar se o link_id já existe e garantir unicidade
+        while (linkIdCounter <= maxAttempts) {
+          const { data: existingLink, error: checkError } = await supabaseServerless
+            .from('user_links')
+            .select('id')
+            .eq('link_id', newLinkId)
+            .single();
+          
+          // Se não encontrar (erro significa que não existe), podemos usar esse link_id
+          if (checkError || !existingLink) {
+            break;
+          }
+          
+          // Se existe, adicionar contador ao final
+          newLinkId = `${baseLinkId}-${linkIdCounter}`;
+          linkIdCounter++;
+          
+          // Limitar tamanho total
+          if (newLinkId.length > 100) {
+            // Se ultrapassar, usar apenas parte do nome
+            const maxBaseLength = 90 - linkIdCounter.toString().length;
+            baseLinkId = baseLinkId.substring(0, maxBaseLength);
+            newLinkId = `${baseLinkId}-${linkIdCounter}`;
+          }
+        }
+        
+        // Se ainda não encontrou um ID único, usar timestamp como fallback
+        if (linkIdCounter > maxAttempts) {
+          newLinkId = `${baseLinkId}-${Date.now()}`;
+        }
+
+        // 6. Criar user_link para o novo membro
+        // Primeiro, criar o link diretamente com campaign_id
+        const { data: newLinkData, error: linkError } = await supabaseServerless
+          .from('user_links')
+          .insert([{
+            user_id: createdAuthUser.id,
+            link_id: newLinkId,
+            referrer_name: `${formData.name} - Membro`,
+            is_active: true,
+            click_count: 0,
+            registration_count: 0,
+            link_type: 'members',
+            campaign: campaignCode,
+            campaign_id: campaignId
+          }])
+          .select()
+          .single();
+
+        if (linkError || !newLinkData) {
+          throw new Error(linkError?.message || 'Erro ao gerar link para o membro');
+        }
+
+        // 7. Gerar URL completa do link
+        const memberLinkUrl = `${window.location.origin}/cadastro/${newLinkId}`;
+        setGeneratedMemberLink(memberLinkUrl);
+
+        // 8. Sucesso - Membro cadastrado
         setIsSuccess(true);
         toast({
           title: "Cadastro realizado com sucesso!",
-          description: `Dupla cadastrada e vinculada a ${formData.referrer}. Uma conta compartilhada foi criada para ambos.`,
+          description: `Dupla cadastrada e vinculada a ${formData.referrer}. Um link de cadastro foi gerado para você.`,
+          duration: 10000,
         });
       }
 
@@ -1386,19 +2069,35 @@ export default function PublicRegister() {
                   ? `${isMember ? 'Membro' : 'Amigo'} atualizado com sucesso!`
                   : 'Dupla cadastrada e vinculada com sucesso!'
                 }
-              </p>
+            </p>
               <div className="space-y-3 text-sm">
-                <div className="p-3 rounded-lg border" style={{ backgroundColor: overlayColors.bgLight, borderColor: overlayColors.border }}>
-                  <p className="font-medium mb-2" style={{ color: '#14446C' }}>
-                    {editMode ? 'Novas Credenciais' : 'Conta Compartilhada'}
-                  </p>
-                  <p className="text-gray-700"><strong>Usuário:</strong> {userCredentials?.username || formData.instagram.replace('@', '')}</p>
-                  <p className="text-gray-700"><strong>Senha:</strong> {userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`}</p>
-                  <p className="text-xs mt-2 text-gray-600">
-                    Esta conta é compartilhada entre <strong>{formData.name}</strong> e <strong>{formData.couple_name}</strong>
-                  </p>
+                {generatedMemberLink && !editMode && (
+                  <div className="p-4 rounded-lg border-2" style={{ backgroundColor: overlayColors.bgLight, borderColor: accentColor }}>
+                    <p className="font-medium mb-3" style={{ color: '#14446C' }}>
+                      Seu Link de Cadastro
+                    </p>
+                    <div className="bg-white p-3 rounded border mb-3 break-all">
+                      <code className="text-xs text-gray-800">{generatedMemberLink}</code>
                 </div>
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedMemberLink);
+                        toast({
+                          title: "Link copiado!",
+                          description: "O link foi copiado para a área de transferência.",
+                        });
+                      }}
+                      className="w-full mb-2"
+                      variant="outline"
+                    >
+                      Copiar Link
+                    </Button>
+                    <p className="text-xs mt-2 text-gray-600">
+                      Compartilhe este link para cadastrar novas pessoas. O link é exclusivo para <strong>{formData.name}</strong> e <strong>{formData.couple_name}</strong>.
+                    </p>
               </div>
+                )}
+            </div>
             </div>
             <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: overlayColors.bgMedium }}>
               <p className="text-sm text-gray-700">
@@ -1411,23 +2110,30 @@ export default function PublicRegister() {
                 </p>
               )}
             </div>
-            <p className="text-sm p-3 rounded-lg mb-4 text-gray-700" style={{ backgroundColor: overlayColors.bgMedium }}>
-              <strong>Como acessar:</strong> {linkData?.link_type === 'friends' 
-                ? 'Este é um cadastro de amigo  O membro responsável receberá as informações de acesso.'
-                : 'Ambos podem usar a mesma conta compartilhada para fazer login no sistema. A dupla compartilha o mesmo usuário, senha e link de cadastro. Clique no botão abaixo para entrar.'
-              }
-            </p>
+            {generatedMemberLink && !editMode && (
+              <p className="text-sm p-3 rounded-lg mb-4 text-gray-700" style={{ backgroundColor: overlayColors.bgMedium }}>
+                <strong>Importante:</strong> Membros não têm acesso ao sistema. Use seu link de cadastro acima para cadastrar novas pessoas.
+              </p>
+            )}
             
             {/* Botão para Entrar no Sistema ou Voltar ao Dashboard */}
             {editMode ? (
-              <Button
-                onClick={() => navigate('/dashboard')}
-                className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200 mb-4"
-              >
-                <ExternalLink className="w-5 h-5 mr-2" />
-                Voltar ao Dashboard
-              </Button>
-            ) : linkData?.link_type !== 'friends' && (
+              // Verificar se o usuário LOGADO é administrador (não o usuário sendo editado)
+              loggedUser && (loggedUser.role === 'admin' || loggedUser.role === 'Administrador') ? (
+                // Administrador sempre volta ao dashboard (mantém contexto do admin)
+                <Button
+                  onClick={() => {
+                    // Voltar para o dashboard sem fazer login do usuário editado
+                    window.location.href = '/dashboard';
+                  }}
+                  className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200 mb-4"
+                >
+                  <ExternalLink className="w-5 h-5 mr-2" />
+                  Voltar ao Dashboard
+                </Button>
+              ) : (
+                // Membro editando - verificar se as credenciais mudaram
+                credentialsChanged && userCredentials ? (
               <Button
                 onClick={async () => {
                   try {
@@ -1435,28 +2141,14 @@ export default function PublicRegister() {
                     const firstName = formData.name.split(' ')[0];
                     setDisplayName(firstName);
                     
-                    // Usar credenciais reais para login
-                    const username = userCredentials?.username || formData.instagram.replace('@', '');
-                    const password = userCredentials?.password || `${formData.instagram.replace('@', '')}${formData.phone.slice(-4)}`;
-                    
-                    // Fazer login direto
-                    const result = await login(username, password);
+                        // Fazer login direto com as novas credenciais
+                        const result = await login(userCredentials.username, userCredentials.password);
                     if (result.success && result.user) {
-                      // Atualizar display_name com o primeiro nome se for diferente
-                      if (result.user.display_name !== firstName) {
-                        try {
-                          await supabase
-                            .from('auth_users')
-                            .update({ display_name: firstName })
-                            .eq('username', username);
-                        } catch (error) {
-                          console.warn('Tivemos um problema ao atualizar display_name:', error);
-                        }
-                      }
-
+                      // display_name removido - não existe mais na tabela auth_users
+                      
                       toast({
                         title: "Login realizado com sucesso!",
-                        description: `Bem-vindo, ${firstName}! Redirecionando...`,
+                            description: `Bem-vindo, ${firstName}! Redirecionando para o dashboard...`,
                       });
                       
                       setTimeout(() => {
@@ -1465,20 +2157,31 @@ export default function PublicRegister() {
                     }
                   } catch (error) {
                     toast({
-                      title: "Não foi possível entrar no sistema",
-                      description: "Verifique suas credenciais e tente novamente.",
+                          title: "Erro no login",
+                          description: "Não foi possível fazer login com as novas credenciais. Tente novamente.",
                       variant: "destructive",
                     });
                   }
                 }}
-                className="w-full h-12 font-semibold text-lg rounded-lg transition-all duration-200 text-white"
-                style={{ backgroundColor: '#CFBA7F' }}
-              >
-                <div className="flex items-center gap-2">
-                  <LogIn className="w-5 h-5" />
-                  Confirmar e Entrar no Sistema
-                </div>
+                    className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200 mb-4"
+                  >
+                    <LogIn className="w-5 h-5 mr-2" />
+                    Entrar com Novas Credenciais
               </Button>
+                ) : (
+                  <Button
+                    onClick={() => navigate('/dashboard')}
+                    className="w-full h-12 bg-[#CFBA7F] hover:bg-[#B8A570] text-white font-semibold text-lg rounded-lg transition-all duration-200 mb-4"
+                  >
+                    <ExternalLink className="w-5 h-5 mr-2" />
+                    Voltar ao Dashboard
+                  </Button>
+                )
+              )
+            ) : (
+              // Membros não têm acesso ao sistema - não mostrar botão de login
+              // O link já foi mostrado acima
+              null
             )}
           </div>
         </div>
@@ -1492,8 +2195,8 @@ export default function PublicRegister() {
 
   // TELA DE LINK DESATIVADO
   if (isLinkDeactivated && !isEditMode) {
-    return (
-      <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
+  return (
+    <div className="min-h-screen bg-institutional-blue flex flex-col items-center justify-center p-4">
         {/* Logo no topo */}
         <div className="mb-8">
           <Logo size="lg" showText={true} layout="vertical" textColor="white" />
@@ -1606,8 +2309,8 @@ export default function PublicRegister() {
           {editMode 
             ? `Editar ${isMember ? 'Membro' : 'Amigo'}`
             : linkData?.link_type === 'friends' 
-              ? 'Membro Cadastrando Amigo' 
-              : 'Cadastre-se como Membro Conectado'
+            ? 'Membro Cadastrando Amigo' 
+            : 'Cadastre-se como Membro Conectado'
           }
         </h1>
         <p className="text-gray-300">
@@ -1625,6 +2328,25 @@ export default function PublicRegister() {
 
       {/* Formulário de Cadastro */}
       <div className="w-full max-w-md space-y-6">
+        {/* Indicador de Etapas */}
+        <div className="flex items-center justify-center space-x-4 mb-6">
+          <div className={`flex items-center space-x-2 ${currentStep >= 1 ? 'text-institutional-gold' : 'text-gray-500'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 1 ? 'bg-institutional-gold text-white' : 'bg-gray-700 text-gray-400'}`}>
+              1
+            </div>
+            <span className="text-sm font-medium">Seus Dados</span>
+          </div>
+          <div className={`w-8 h-0.5 ${currentStep >= 2 ? 'bg-institutional-gold' : 'bg-gray-700'}`}></div>
+          <div className={`flex items-center space-x-2 ${currentStep >= 2 ? 'text-institutional-gold' : 'text-gray-500'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 2 ? 'bg-institutional-gold text-white' : 'bg-gray-700 text-gray-400'}`}>
+              2
+            </div>
+            <span className="text-sm font-medium">Dados do Parceiro</span>
+          </div>
+        </div>
+        {/* Primeira Etapa - Seus Dados */}
+        {currentStep === 1 && (
+          <>
         {/* Campo Nome */}
         <div className="space-y-1">
           <div className="relative">
@@ -1633,7 +2355,7 @@ export default function PublicRegister() {
               type="text"
               placeholder="Nome Completo (ex: João Silva)"
               value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
+              onChange={(e) => handleInputChange('name', formatName(e.target.value))}
               className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.name ? 'border-red-500' : ''}`}
               required
             />
@@ -1776,7 +2498,78 @@ export default function PublicRegister() {
           )}
         </div>
 
-        {/* Separador */}
+        {/* Campo Quem te indicou - Apenas para cadastro de membros, não para amigos e não para admin_b */}
+        {linkData?.link_type !== 'friends' && user?.username?.toLowerCase() !== 'admin_b' && (
+        <div className="space-y-1">
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Quem te indicou"
+              value={formData.referrer_name}
+              onChange={(e) => handleInputChange('referrer_name', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.referrer_name ? 'border-red-500' : ''}`}
+            />
+          </div>
+          {formErrors.referrer_name && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.referrer_name}</span>
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Campo Telefone de quem te indicou - Apenas para cadastro de membros, não para amigos e não para admin_b */}
+        {linkData?.link_type !== 'friends' && user?.username?.toLowerCase() !== 'admin_b' && (
+        <div className="space-y-1">
+          <div className="relative">
+            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <Input
+              type="tel"
+              placeholder="Telefone de quem te indicou (62) 99999-9999"
+              value={formData.referrer_phone}
+              onChange={(e) => handleInputChange('referrer_phone', e.target.value)}
+              className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.referrer_phone ? 'border-red-500' : ''}`}
+              maxLength={15}
+            />
+          </div>
+          {formErrors.referrer_phone && (
+            <div className="flex items-center gap-1 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{formErrors.referrer_phone}</span>
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Botão Próximo - Primeira Etapa */}
+        <button
+          type="button"
+          onClick={() => setCurrentStep(2)}
+          disabled={!isFirstStepComplete()}
+          className={`w-full h-12 rounded-lg font-semibold transition-all duration-200 ${
+            isFirstStepComplete()
+              ? 'bg-institutional-gold hover:bg-yellow-600 text-white'
+              : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          Próximo - Dados do Parceiro
+        </button>
+          </>
+        )}
+
+        {/* Segunda Etapa - Dados do Parceiro */}
+        {currentStep === 2 && (
+          <>
+            {/* Botão Voltar */}
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className="w-full h-10 rounded-lg font-semibold bg-gray-700 hover:bg-gray-600 text-white transition-all duration-200 mb-4"
+            >
+              ← Voltar para Seus Dados
+            </button>
         <div className="flex items-center gap-4">
           <div className="flex-1 h-px bg-gray-600"></div>
           <span className="text-gray-400 text-sm font-medium">Dados da Segunda Pessoa</span>
@@ -1791,7 +2584,7 @@ export default function PublicRegister() {
               type="text"
               placeholder="Nome Completo do Parceiro (ex: Maria Silva)"
               value={formData.couple_name}
-              onChange={(e) => handleInputChange('couple_name', e.target.value)}
+              onChange={(e) => handleInputChange('couple_name', formatName(e.target.value))}
               className={`pl-12 h-12 bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-institutional-gold focus:ring-institutional-gold rounded-lg ${formErrors.couple_name ? 'border-red-500' : ''}`}
               required
             />
@@ -1917,7 +2710,7 @@ export default function PublicRegister() {
             {isValidatingCoupleInstagram && (
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
                 <div className="w-5 h-5 border-2 border-institutional-gold border-t-transparent rounded-full animate-spin" />
-              </div>
+          </div>
             )}
             {/* Indicador de validação bem-sucedida */}
             {isCoupleInstagramValid && !isValidatingCoupleInstagram && !coupleInstagramValidationError && (
@@ -1965,9 +2758,8 @@ export default function PublicRegister() {
             </div>
           )}
         </Button>
-
-        {/* Informação adicional */}
-       
+          </>
+        )}
       </div>
 
 

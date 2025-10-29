@@ -146,7 +146,6 @@ export const Autocomplete = React.forwardRef<AutocompleteRef, AutocompleteProps>
 
   // Handle suggestion selection
   const handleSuggestionClick = (suggestion: Suggestion) => {
-    console.log('🎯 Iniciando seleção:', suggestion.name);
     
     // Fechar dropdown ANTES de qualquer coisa
     setIsOpen(false);
@@ -409,13 +408,11 @@ export const Autocomplete = React.forwardRef<AutocompleteRef, AutocompleteProps>
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log('🖱️ MouseDown capturado:', suggestion.name);
                       handleSuggestionClick(suggestion);
                     }}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log('🖱️ Click capturado:', suggestion.name);
                     }}
                     className={`w-full px-4 py-3 text-left text-white hover:bg-gray-700 active:bg-gray-600 flex items-center gap-3 transition-colors cursor-pointer select-none ${
                       index === selectedIndex ? 'bg-gray-700' : ''

@@ -1,6 +1,6 @@
 // hooks/usePaidContracts.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface PaidContract {
   id: string
@@ -49,7 +49,7 @@ export const usePaidContracts = (memberId?: string) => {
       setLoading(true)
       setError(null)
 
-      let query = supabase
+      let query = supabaseServerless
         .from('paid_contracts')
         .select(`
           *,
@@ -75,7 +75,7 @@ export const usePaidContracts = (memberId?: string) => {
 
   const fetchContractStats = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('paid_contracts')
         .select('contract_status, post_verified_1, post_verified_2')
 
@@ -100,7 +100,7 @@ export const usePaidContracts = (memberId?: string) => {
   const addContract = async (contractData: Omit<PaidContract, 'id' | 'created_at' | 'updated_at' | 'member_data'>) => {
     try {
       // Verificar se a fase de contratos pagos está ativa
-      const { data: canRegister, error: canRegisterError } = await supabase
+      const { data: canRegister, error: canRegisterError } = await supabaseServerless
         .rpc('can_register_paid_contract')
 
       if (canRegisterError) throw canRegisterError
@@ -110,7 +110,7 @@ export const usePaidContracts = (memberId?: string) => {
       }
 
       // Verificar se o membro já tem 15 contratos
-      const { data: existingContracts, error: countError } = await supabase
+      const { data: existingContracts, error: countError } = await supabaseServerless
         .from('paid_contracts')
         .select('id')
         .eq('member_id', contractData.member_id)
@@ -126,7 +126,7 @@ export const usePaidContracts = (memberId?: string) => {
       const hashtag1 = `#Conectados${contractData.member_id.slice(-6)}${contractData.couple_instagram_1.slice(-3)}`
       const hashtag2 = `#Conectados${contractData.member_id.slice(-6)}${contractData.couple_instagram_2.slice(-3)}`
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('paid_contracts')
         .insert([{
           ...contractData,
@@ -157,7 +157,7 @@ export const usePaidContracts = (memberId?: string) => {
         updateData.completion_date = new Date().toISOString().split('T')[0]
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('paid_contracts')
         .update(updateData)
         .eq('id', contractId)
@@ -182,7 +182,7 @@ export const usePaidContracts = (memberId?: string) => {
         [`post_verified_${personNumber}`]: true
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('paid_contracts')
         .update(updateData)
         .eq('id', contractId)
@@ -192,7 +192,7 @@ export const usePaidContracts = (memberId?: string) => {
       if (error) throw error
 
       // Salvar também na tabela de posts do Instagram
-      const { error: postError } = await supabase
+      const { error: postError } = await supabaseServerless
         .from('instagram_posts')
         .insert([{
           contract_id: contractId,

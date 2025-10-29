@@ -8,7 +8,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { usePlanFeatures } from '@/hooks/usePlanFeatures';
 import { useToast } from '@/hooks/use-toast';
 import { Users, UserCheck, ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabaseServerless } from '@/lib/supabase';
 
 // Função para buscar cor inicial da campanha ANTES de renderizar
 const getInitialCampaignColor = (): string => {
@@ -68,7 +68,7 @@ export default function Settings() {
           const campaignCode = userData.campaign;
           
           if (campaignCode) {
-            const { data: campaignData, error } = await supabase
+            const { data: campaignData, error } = await supabaseServerless
               .from('campaigns')
               .select('primary_color')
               .eq('code', campaignCode)
@@ -106,7 +106,7 @@ export default function Settings() {
           const campaignCode = userData.campaign;
           
           if (campaignCode) {
-            const { data: campaignData, error } = await supabase
+            const { data: campaignData, error } = await supabaseServerless
               .from('campaigns')
               .select('nome_plano')
               .eq('code', campaignCode)
@@ -129,9 +129,6 @@ export default function Settings() {
               } else if (planNameLower.includes('profissional')) {
                 maxMembers = 250;
                 maxFriends = 250;
-              } else if (planNameLower.includes('valter') || planNameLower.includes('b luxo')) {
-                maxMembers = 1500;
-                maxFriends = 22500;
               }
               
               setQuickPlanInfo({
@@ -193,9 +190,7 @@ export default function Settings() {
     error, 
     refetch, 
     updateMemberLinksType,
-    activatePaidContractsPhase,
-    deactivatePaidContractsPhase,
-    canActivatePaidContracts
+    updateSettingsLocal
   } = useSystemSettings();
   const [isUpdating, setIsUpdating] = useState(false);
   const { toast } = useToast();
@@ -210,7 +205,7 @@ export default function Settings() {
   useEffect(() => {
     const ensureInitialSettings = async () => {
       try {
-        const { data: existingSettings, error: fetchError } = await supabase
+        const { data: existingSettings, error: fetchError } = await supabaseServerless
           .from('system_settings')
           .select('*')
           .eq('setting_key', 'member_links_type');
@@ -220,7 +215,7 @@ export default function Settings() {
         if (!existingSettings || existingSettings.length === 0) {
           // Criando configuração inicial
           
-          const { error: insertError } = await supabase
+          const { error: insertError } = await supabaseServerless
             .from('system_settings')
             .insert([{
               setting_key: 'member_links_type',
@@ -255,13 +250,14 @@ export default function Settings() {
 
     try {
       setIsUpdating(true);
-     
       
       const result = await updateMemberLinksType(linkType, user?.campaign);
       
-     
-      
+      // Forçar atualização da interface
       if (result.success) {
+        // Atualizar estado local imediatamente para feedback visual
+        updateSettingsLocal({ member_links_type: linkType });
+        
         toast({
           title: "Configuração atualizada!",
           description: `Tipo de links alterado para: ${linkType === 'members' ? 'Novos Membros' : 'Amigos'}. Links existentes também foram atualizados`,
@@ -358,17 +354,6 @@ export default function Settings() {
               <div className="text-right">
                 <span className="text-institutional-blue font-medium">Bem-vindo, {user?.name || quickUserData?.name || 'Usuário'}</span>
                 <div className="text-sm text-muted-foreground">{user?.role || quickUserData?.role || 'Membro'}</div>
-                {((quickPlanInfo?.planName) || (planFeatures.planName)) && (user?.campaign?.toLowerCase() !== 'hitech' && user?.username?.toLowerCase() !== 'adminhitech' && !(quickPlanInfo?.planName?.toLowerCase().includes('valter') || planFeatures.planName?.toLowerCase().includes('valter')) && !(quickPlanInfo?.planName?.toLowerCase().includes('saúde') || planFeatures.planName?.toLowerCase().includes('saúde')) && !(quickPlanInfo?.planName?.toLowerCase().includes('saude') || planFeatures.planName?.toLowerCase().includes('saude')) && user?.campaign?.toLowerCase() !== 'b' && user?.username?.toLowerCase() !== 'admin_b') && (
-                  <div className="text-xs text-muted-foreground">
-                    Plano: {quickPlanInfo?.planName || planFeatures.planName}
-                    <span className="ml-1 text-orange-600">
-                      {((quickPlanInfo?.maxMembers && quickPlanInfo.maxMembers < 999999 && quickPlanInfo.maxFriends < 999999) || (planFeatures.maxMembers < 999999 && planFeatures.maxFriends < 999999)) ? 
-                        `(${(quickPlanInfo?.maxMembers || planFeatures.maxMembers) + (quickPlanInfo?.maxFriends || planFeatures.maxFriends)} cadastros)` :
-                        `(Ilimitado)`
-                      }
-                    </span>
-                  </div>
-                )}
               </div>
               <Button
                 onClick={handleLogout}
@@ -487,108 +472,13 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Controle de Fase - Apenas para planos B Luxo e Valter */}
-            {planFeatures.planName && (
-              (planFeatures.planName.toLowerCase().includes('b luxo') || 
-               planFeatures.planName.toLowerCase().includes('valter')) && (
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-800">Controle de Fase</h4>
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-blue-800">
-                          {settings?.paid_contracts_phase_active ? 'Fase Ativa' : 'Fase Inativa'}
-                        </div>
-                        <div className="text-sm text-blue-600">
-                          {settings?.paid_contracts_phase_active 
-                            ? '.Fase de amigos ativa'
-                            : 'Cada membro poderá cadastrar 15 duplas de amigos quando ativada'
-                          }
-                        </div>
-                      </div>
-                      <div>
-                        {settings?.paid_contracts_phase_active ? (
-                          <Button
-                            onClick={async () => {
-                              try {
-                                setIsUpdating(true);
-                                const result = await deactivatePaidContractsPhase();
-                                
-                                if (result.success) {
-                                  toast({
-                                    title: "Fase desativada!",
-                                    description: "Voltou para cadastro de membros normais.",
-                                  });
-                                } else {
-                                  toast({
-                                    title: "Erro ao desativar",
-                                    description: result.error || "Não foi possível desativar",
-                                    variant: "destructive",
-                                  });
-                                }
-                              } catch (err) {
-                                toast({
-                                  title: "Erro",
-                                  description: "Ocorreu um erro inesperado",
-                                  variant: "destructive",
-                                });
-                              } finally {
-                                setIsUpdating(false);
-                              }
-                            }}
-                            disabled={isUpdating}
-                            variant="destructive"
-                            size="sm"
-                          >
-                            Desativar
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={async () => {
-                              try {
-                                setIsUpdating(true);
-                                const result = await activatePaidContractsPhase();
-                                
-                                if (result.success) {
-                                  toast({
-                                    title: "Fase ativada!",
-                                    description: "Membros agora podem cadastrar amigos.",
-                                  });
-                                } else {
-                                  toast({
-                                    title: "Erro ao ativar",
-                                    description: result.error || "Não foi possível ativar",
-                                    variant: "destructive",
-                                  });
-                                }
-                              } catch (err) {
-                                toast({
-                                  title: "Erro",
-                                  description: "Ocorreu um erro inesperado",
-                                  variant: "destructive",
-                                });
-                              } finally {
-                                setIsUpdating(false);
-                              }
-                            }}
-                            disabled={isUpdating || !canActivatePaidContracts()}
-                            className={canActivatePaidContracts() ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'}
-                            size="sm"
-                          >
-                            {canActivatePaidContracts() ? 'Ativar' : 'Aguardando 1500 membros'}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            )}
 
-            {/* Informações Importantes - Apenas para planos B Luxo e Valter */}
+            {/* Informações Importantes - Apenas para Plano A e Plano B */}
             {planFeatures.planName && (
-              (planFeatures.planName.toLowerCase().includes('b luxo') || 
-               planFeatures.planName.toLowerCase().includes('valter')) && (
+              (planFeatures.planName.toLowerCase().includes('plano a') || 
+               planFeatures.planName.toLowerCase() === 'a' ||
+               planFeatures.planName.toLowerCase().includes('plano b') || 
+               planFeatures.planName.toLowerCase().includes('b luxo')) && (
                 <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                   <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Informações Importantes</h4>
                   <ul className="text-yellow-700 text-sm space-y-1">

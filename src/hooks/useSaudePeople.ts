@@ -1,6 +1,6 @@
 // hooks/useSaudePeople.ts
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabaseServerless } from '@/lib/supabase';
 
 export interface SaudePerson {
   id: string;
@@ -11,6 +11,8 @@ export interface SaudePerson {
   cep?: string;
   cidade?: string;
   observacoes: string;
+  campaign?: string;
+  campaign_id?: string;
   created_at: string;
   updated_at?: string;
   deleted_at?: string;
@@ -25,9 +27,10 @@ export interface NewSaudePerson {
   cidade?: string;
   observacoes: string;
   campaign?: string;
+  campaign_id?: string;
 }
 
-export const useSaudePeople = (campaignCode?: string) => {
+export const useSaudePeople = (campaignCode?: string, campaignId?: string | null) => {
   const [people, setPeople] = useState<SaudePerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +41,14 @@ export const useSaudePeople = (campaignCode?: string) => {
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('saude_people')
-        .select('*')
-        .is('deleted_at', null);
+      let query = supabaseServerless
+        .from('people')
+        .select('*');
 
-      // Filtrar por campanha se especificada
-      if (campaignCode) {
+      // IMPORTANTE: Priorizar campaign_id (relacional), mas também filtrar por campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId);
+      } else if (campaignCode) {
         query = query.eq('campaign', campaignCode);
       }
 
@@ -55,7 +59,13 @@ export const useSaudePeople = (campaignCode?: string) => {
         throw fetchError;
       }
 
-      setPeople(data || []);
+      // Filtrar pessoas não excluídas no frontend
+      if (Array.isArray(data)) {
+        const activePeople = data.filter(person => !person.deleted_at);
+        setPeople(activePeople);
+      } else {
+        setPeople([]);
+      }
     } catch (err) {
       console.error('❌ Erro ao buscar pessoas da saúde:', err);
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
@@ -67,11 +77,10 @@ export const useSaudePeople = (campaignCode?: string) => {
   // Adicionar nova pessoa
   const addSaudePerson = async (personData: NewSaudePerson): Promise<SaudePerson | null> => {
     try {
-      console.log('📝 Cadastrando nova pessoa na campanha de saúde...', personData);
 
       // OPÇÃO 1: Tentar INSERT direto na tabela
-      const { data, error: insertError } = await supabase
-        .from('saude_people')
+      const { data, error: insertError } = await supabaseServerless
+        .from('people')
         .insert([
           {
             lider_nome_completo: personData.lider_nome_completo,
@@ -81,7 +90,8 @@ export const useSaudePeople = (campaignCode?: string) => {
             cep: personData.cep || null,
             cidade: personData.cidade || null,
             observacoes: personData.observacoes,
-            campaign: personData.campaign || campaignCode
+            campaign: personData.campaign || campaignCode,
+            campaign_id: personData.campaign_id || campaignId || null
           }
         ])
         .select()
@@ -89,17 +99,15 @@ export const useSaudePeople = (campaignCode?: string) => {
 
       // Se INSERT direto funcionar
       if (!insertError && data) {
-        console.log('✅ Pessoa cadastrada com sucesso (INSERT direto):', data);
         await fetchSaudePeople();
         return data;
       }
 
       // Se falhar com erro de RLS, tentar usar a function
       if (insertError && insertError.code === '42501') {
-        console.log('⚠️ RLS bloqueou INSERT direto, tentando via function...');
         
         // OPÇÃO 2: Usar function que bypassa RLS
-        const { data: funcData, error: funcError } = await supabase
+        const { data: funcData, error: funcError } = await supabaseServerless
           .rpc('insert_saude_person', {
             p_lider_nome_completo: personData.lider_nome_completo,
             p_lider_whatsapp: personData.lider_whatsapp,
@@ -115,7 +123,6 @@ export const useSaudePeople = (campaignCode?: string) => {
           throw funcError;
         }
 
-        console.log('✅ Pessoa cadastrada com sucesso (via function):', funcData);
         await fetchSaudePeople();
         return funcData as SaudePerson;
       }
@@ -137,8 +144,8 @@ export const useSaudePeople = (campaignCode?: string) => {
   // Verificar se uma pessoa já existe pelo WhatsApp
   const checkPersonExists = async (whatsapp: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase
-        .from('saude_people')
+      const { data, error } = await supabaseServerless
+        .from('people')
         .select('id')
         .eq('pessoa_whatsapp', whatsapp)
         .is('deleted_at', null)
@@ -158,8 +165,8 @@ export const useSaudePeople = (campaignCode?: string) => {
   // Verificar se um líder já existe pelo WhatsApp
   const checkLeaderExists = async (whatsapp: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase
-        .from('saude_people')
+      const { data, error } = await supabaseServerless
+        .from('people')
         .select('id')
         .eq('lider_whatsapp', whatsapp)
         .is('deleted_at', null)
@@ -179,8 +186,8 @@ export const useSaudePeople = (campaignCode?: string) => {
   // Soft delete de uma pessoa
   const softDeletePerson = async (id: string): Promise<boolean> => {
     try {
-      const { error: deleteError } = await supabase
-        .from('saude_people')
+      const { error: deleteError } = await supabaseServerless
+        .from('people')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', id);
 
@@ -188,7 +195,6 @@ export const useSaudePeople = (campaignCode?: string) => {
         throw deleteError;
       }
 
-      console.log('✅ Pessoa deletada (soft delete):', id);
 
       // Atualizar lista local
       await fetchSaudePeople();
@@ -204,8 +210,8 @@ export const useSaudePeople = (campaignCode?: string) => {
   // Atualizar uma pessoa
   const updateSaudePerson = async (id: string, updates: Partial<NewSaudePerson>): Promise<boolean> => {
     try {
-      const { error: updateError } = await supabase
-        .from('saude_people')
+      const { error: updateError } = await supabaseServerless
+        .from('people')
         .update(updates)
         .eq('id', id);
 
@@ -213,7 +219,6 @@ export const useSaudePeople = (campaignCode?: string) => {
         throw updateError;
       }
 
-      console.log('✅ Pessoa atualizada:', id);
 
       // Atualizar lista local
       await fetchSaudePeople();
@@ -230,7 +235,7 @@ export const useSaudePeople = (campaignCode?: string) => {
   useEffect(() => {
     fetchSaudePeople();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignCode]);
+  }, [campaignCode, campaignId]);
 
   return {
     people,

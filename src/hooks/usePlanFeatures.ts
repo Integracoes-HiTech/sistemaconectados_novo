@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabaseServerless } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 
 export interface PlanFeatures {
@@ -41,18 +41,40 @@ export function usePlanFeatures() {
 
   useEffect(() => {
     const fetchPlanFeatures = async () => {
-      if (!user?.campaign) {
+      // Usar campaign_id se disponível, caso contrário usar campaign (texto) para compatibilidade
+      if (!user?.campaign_id && !user?.campaign) {
         setLoading(false);
         return;
       }
 
       try {
         // 🚀 OTIMIZAÇÃO: Buscar apenas nome_plano primeiro para renderização rápida
-        const { data: campaignData, error: campaignError } = await supabase
-          .from('campaigns')
-          .select('nome_plano, plano_id')
-          .eq('code', user.campaign)
-          .single();
+        let campaignData: any = null;
+        let campaignError: any = null;
+        
+        // Tentar buscar por campaign_id primeiro (relacional)
+        if (user?.campaign_id) {
+          const result = await supabaseServerless
+            .from('campaigns')
+            .select('nome_plano, plano_id')
+            .eq('id', user.campaign_id)
+            .single();
+          
+          campaignData = result.data;
+          campaignError = result.error;
+        } 
+        
+        // Se não encontrou por campaign_id ou não tem campaign_id, tentar por código
+        if (campaignError && user?.campaign) {
+          const result = await supabaseServerless
+            .from('campaigns')
+            .select('nome_plano, plano_id')
+            .eq('code', user.campaign)
+            .single();
+          
+          campaignData = result.data;
+          campaignError = result.error;
+        }
 
         if (campaignError) {
           console.error('Erro ao buscar dados da campanha:', campaignError);
@@ -66,9 +88,13 @@ export function usePlanFeatures() {
         const isAdvancedPlan = planNameLower.includes('avançado') || planNameLower.includes('avancado');
         const isEssentialPlan = planNameLower.includes('essencial');
         const isProfessionalPlan = planNameLower.includes('profissional');
-        const isBLuxoPlan = planNameLower.includes('b luxo') || planNameLower.includes('plano b luxo');
-        const isValterPlan = planNameLower.includes('valter');
-        const isSaudePlan = planNameLower.includes('saúde') || planNameLower.includes('saude');
+        // Plano A e Plano B (que era Plano B Luxo) - mesmas features
+        const isPlanA = planNameLower.includes('plano a') || planNameLower === 'a';
+        const isPlanB = planNameLower.includes('plano b') || planNameLower.includes('b luxo') || planNameLower.includes('plano b luxo');
+        const isSaudePlan = planNameLower.includes('pessoas');
+        
+        // Plano A e Plano B têm as mesmas features
+        const isPlanAOrB = isPlanA || isPlanB;
         
         // 🚀 OTIMIZAÇÃO: Calcular features básicas IMEDIATAMENTE sem esperar plano_id
         const basicFeatures: PlanFeatures = {
@@ -79,11 +105,13 @@ export function usePlanFeatures() {
           canRegisterFriends: true,
           canExport: !isFreePlan && !isEssentialPlan,
           canViewRecentRegistrations: !isFreePlan,
-          canViewTopMembers: isValterPlan || isBLuxoPlan,
-          canViewColorCards: isBLuxoPlan || isValterPlan,
-          canViewRankingColumns: isBLuxoPlan || isValterPlan,
-          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isValterPlan ? 1500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 1500 : ((isAdvancedPlan) ? 999999 : 500)))))),
-          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isValterPlan ? 22500 : (isSaudePlan ? 999999 : (isBLuxoPlan ? 22500 : 999999))))),
+          // Plano A e Plano B têm acesso a: Top 100 membros, posição, contratos, status
+          canViewTopMembers: isPlanAOrB,
+          canViewColorCards: isPlanAOrB,
+          canViewRankingColumns: isPlanAOrB,
+          // Plano A e Plano B: 1500 membros, 22500 amigos
+          maxMembers: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isPlanAOrB ? 1500 : (isSaudePlan ? 999999 : ((isAdvancedPlan) ? 999999 : 500))))),
+          maxFriends: isFreePlan ? 25 : (isEssentialPlan ? 1000 : (isProfessionalPlan ? 2500 : (isPlanAOrB ? 22500 : (isSaudePlan ? 999999 : 999999)))),
           planName,
           planId: campaignData.plano_id
         };
@@ -99,17 +127,20 @@ export function usePlanFeatures() {
         
         if (campaignData.plano_id) {
           try {
-            const { data: planData } = await supabase
+            const { data: planData, error: planError } = await supabaseServerless
               .from('planos_precos')
               .select('amount, max_members')
               .eq('id', campaignData.plano_id)
               .single();
             
-            if (planData) {
+            if (planError) {
+              console.warn('Erro ao buscar dados do plano (não crítico):', planError);
+            } else if (planData) {
               planAmount = planData.amount || 1500;
               planMaxMembers = planData.max_members || 1500;
             }
           } catch (planError) {
+            console.warn('Erro ao buscar dados do plano (não crítico):', planError);
           }
         }
         
@@ -121,7 +152,7 @@ export function usePlanFeatures() {
     };
 
     fetchPlanFeatures();
-  }, [user?.campaign]);
+  }, [user?.campaign, user?.campaign_id]);
 
   return { features, loading };
 }

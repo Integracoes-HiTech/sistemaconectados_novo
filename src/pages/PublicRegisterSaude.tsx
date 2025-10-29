@@ -44,13 +44,13 @@ export default function PublicRegisterSaude() {
   const [isLoading, setIsLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
-  const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople(user?.campaign);
+  const { addSaudePerson, checkPersonExists, updateSaudePerson } = useSaudePeople(user?.campaign, user?.campaign_id);
   const { getCampaignByCode, loading: campaignsLoading } = useCampaigns();
   
   // Buscar cores da campanha específica do usuário com memoização
   const { bgColor, accentColor } = useMemo(() => {
     // Usar a campanha passada via state ou a campanha do usuário
-    const campaignCode = campaign || user?.campaign || 'saude';
+    const campaignCode = campaign || user?.campaign || 'pessoas';
     const userCampaign = getCampaignByCode(campaignCode);
     
     return {
@@ -131,13 +131,24 @@ export default function PublicRegisterSaude() {
     }
   };
 
+  const formatName = (value: string) => {
+    // Remove caracteres não permitidos
+    const cleaned = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '');
+    
+    // Capitaliza a primeira letra de cada palavra
+    return cleaned.split(' ').map(word => {
+      if (word.length === 0) return '';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+  };
+
   const handleInputChange = (field: string, value: string) => {
     let processedValue = value;
     
     if (field === 'liderWhatsapp' || field === 'pessoaWhatsapp') {
       processedValue = formatPhone(value);
     } else if (field === 'liderNomeCompleto' || field === 'pessoaNomeCompleto') {
-      processedValue = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '');
+      processedValue = formatName(value);
     } else if (field === 'cep') {
       processedValue = formatCep(value);
     }
@@ -315,7 +326,8 @@ export default function PublicRegisterSaude() {
           cep: formData.cep || undefined,
           cidade: formData.cidade || undefined,
           observacoes: formData.observacoes,
-          campaign: campaign || user?.campaign
+          campaign: campaign || user?.campaign,
+          campaign_id: user?.campaign_id
         });
 
         toast({

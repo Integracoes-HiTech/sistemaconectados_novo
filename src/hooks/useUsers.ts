@@ -1,8 +1,8 @@
 // hooks/useUsers.ts
 import { useState, useEffect } from 'react'
-import { supabase, User } from '@/lib/supabase'
+import { supabaseServerless, User } from '@/lib/supabase'
 
-export const useUsers = (referrer?: string, campaign?: string) => {
+export const useUsers = (referrer?: string, campaign?: string, campaignId?: string | null) => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +19,7 @@ export const useUsers = (referrer?: string, campaign?: string) => {
     }, 100)
     
     return () => clearTimeout(timeoutId)
-  }, [referrer, campaign])
+  }, [referrer, campaign, campaignId])
 
   const fetchUsers = async () => {
     try {
@@ -34,19 +34,19 @@ export const useUsers = (referrer?: string, campaign?: string) => {
         return
       }
 
-      let query = supabase
+      let query = supabaseServerless
         .from('users')
         .select('*')
         .order('created_at', { ascending: false })
 
       if (referrer) {
         query = query.eq('referrer', referrer)
-        // Buscando usuários para referrer
-      } else {
-        // Buscando todos os usuários
       }
       
-      if (campaign) {
+      // Usar campaign_id se disponível (relacional), caso contrário usar campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (campaign) {
         query = query.eq('campaign', campaign)
       }
 
@@ -76,18 +76,22 @@ export const useUsers = (referrer?: string, campaign?: string) => {
 
   const addUser = async (userData: Omit<User, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('users')
         .insert([userData])
         .select()
 
       if (error) throw error
 
-      if (data) {
+      if (data && Array.isArray(data) && data.length > 0) {
         setUsers(prev => [data[0], ...prev])
+        return { success: true, data: data[0] }
+      } else {
+        return { 
+          success: false, 
+          error: 'Dados não retornados pela API' 
+        }
       }
-
-      return { success: true, data: data?.[0] }
     } catch (err) {
       return { 
         success: false, 
@@ -98,7 +102,7 @@ export const useUsers = (referrer?: string, campaign?: string) => {
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('users')
         .update(updates)
         .eq('id', id)
@@ -123,7 +127,7 @@ export const useUsers = (referrer?: string, campaign?: string) => {
 
   const deleteUser = async (id: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseServerless
         .from('users')
         .delete()
         .eq('id', id)
@@ -146,7 +150,7 @@ export const useUsers = (referrer?: string, campaign?: string) => {
       const normalizedPhone = phone.replace(/\D/g, '');
       
       // Verificar se já existe usuário com este Instagram ou telefone
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('users')
         .select('id, name, instagram, phone')
 

@@ -1,6 +1,6 @@
 // hooks/useCampaigns.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface Campaign {
   id: string
@@ -27,7 +27,7 @@ export const useCampaigns = () => {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await supabaseServerless
         .from('campaigns')
         .select('*')
         .order('created_at', { ascending: false })
@@ -49,7 +49,7 @@ export const useCampaigns = () => {
 
   const deleteCampaign = async (campaignId: string) => {
     try {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await supabaseServerless
         .from('campaigns')
         .delete()
         .eq('id', campaignId)
@@ -72,8 +72,19 @@ export const useCampaigns = () => {
       const newStatus = !currentStatus;
       const now = new Date().toISOString();
 
-      // PASSO 1: Atualizar status da campanha
-      const { error: campaignError } = await supabase
+      // PASSO 1: Buscar a campanha para obter o ID
+      const { data: campaignData, error: fetchCampaignError } = await supabaseServerless
+        .from('campaigns')
+        .select('id')
+        .eq('code', campaignCode)
+        .single();
+
+      if (fetchCampaignError) {
+        throw fetchCampaignError;
+      }
+
+      // PASSO 2: Atualizar status da campanha
+      const { error: campaignError } = await supabaseServerless
         .from('campaigns')
         .update({ 
           is_active: newStatus,
@@ -87,52 +98,64 @@ export const useCampaigns = () => {
 
       if (newStatus) {
         // REATIVAR: remover deleted_at de auth_users e user_links
-        
-        // Reativar auth_users
-        await supabase
+        // Reativar todos os usuários da campanha por campaign_code
+        await supabaseServerless
           .from('auth_users')
           .update({ 
             deleted_at: null,
             is_active: true,
             updated_at: now
           })
-          .eq('campaign', campaignCode)
-          .not('deleted_at', 'is', null);
+          .eq('campaign', campaignCode);
+        
+        // Reativar usuários vinculados por campaign_id
+        await supabaseServerless
+          .from('auth_users')
+          .update({ 
+            deleted_at: null,
+            is_active: true,
+            updated_at: now
+          })
+          .eq('campaign_id', campaignData.id);
 
-        // Reativar user_links
-        await supabase
+        await supabaseServerless
           .from('user_links')
           .update({ 
             deleted_at: null,
             is_active: true,
             updated_at: now
           })
-          .eq('campaign', campaignCode)
-          .not('deleted_at', 'is', null);
+          .eq('campaign', campaignCode);
       } else {
         // DESATIVAR: soft delete em auth_users e user_links
-        
-        // Soft delete em auth_users
-        await supabase
+        // Desativar todos os usuários da campanha por campaign_code
+        await supabaseServerless
           .from('auth_users')
           .update({ 
             deleted_at: now,
             is_active: false,
             updated_at: now
           })
-          .eq('campaign', campaignCode)
-          .is('deleted_at', null);
+          .eq('campaign', campaignCode);
+        
+        // Desativar usuários vinculados por campaign_id
+        await supabaseServerless
+          .from('auth_users')
+          .update({ 
+            deleted_at: now,
+            is_active: false,
+            updated_at: now
+          })
+          .eq('campaign_id', campaignData.id);
 
-        // Soft delete em user_links
-        await supabase
+        await supabaseServerless
           .from('user_links')
           .update({ 
             deleted_at: now,
             is_active: false,
             updated_at: now
           })
-          .eq('campaign', campaignCode)
-          .is('deleted_at', null);
+          .eq('campaign', campaignCode);
       }
 
       await fetchCampaigns();

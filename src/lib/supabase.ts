@@ -1,10 +1,7 @@
 // lib/supabase.ts
-import { createClient } from '@supabase/supabase-js'
+// Usar cliente serverless para maior segurança
 
-const supabaseUrl = 'https://zveysullpsdopcwsncai.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y'
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export { supabase, supabaseServerless } from './k9m7x2'
 
 // Tipos para o banco de dados
 export interface User {
@@ -29,6 +26,8 @@ export interface AuthUser {
   full_name: string
   display_name?: string
   campaign?: string
+  campaign_id?: string | null
+  plano_id?: string | null
   created_at: string
   updated_at: string
 }

@@ -2,8 +2,12 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
+import EditMemberModal from "@/components/EditMemberModal";
+import EditFriendModal from "@/components/EditFriendModal";
+import EditSaudePersonModal from "@/components/EditSaudePersonModal";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { 
@@ -56,7 +60,7 @@ import { useCampaigns } from "@/hooks/useCampaigns";
 import type { Campaign } from "@/hooks/useCampaigns";
 import { useAdmins } from "@/hooks/useAdmins";
 import type { AdminUser } from "@/hooks/useAdmins";
-import { supabase } from "@/lib/supabase";
+import { supabaseServerless } from "@/lib/supabase";
 
 export default function Dashboard() {
   
@@ -124,16 +128,45 @@ export default function Dashboard() {
   const [friendsCurrentPage, setFriendsCurrentPage] = useState(1);
   const [saudePeopleCurrentPage, setSaudePeopleCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50); // 50 itens por página para melhor performance com grandes volumes
+  
+  // Estados para o modal de edição
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; member: { id: string; name: string } | null }>({
+    isOpen: false,
+    member: null
+  });
+  const [selectedMemberForEdit, setSelectedMemberForEdit] = useState<{ id: string; name: string; [key: string]: unknown } | null>(null);
+  const [tableRefreshKey, setTableRefreshKey] = useState(0);
+  
+  // Estados para o modal de edição de amigos
+  const [isEditFriendModalOpen, setIsEditFriendModalOpen] = useState(false);
+  const [selectedFriendForEdit, setSelectedFriendForEdit] = useState<{ id: string; name: string; [key: string]: unknown } | null>(null);
+  
+  // Estado para o modal de confirmação de exclusão de amigos
+  const [deleteFriendConfirmModal, setDeleteFriendConfirmModal] = useState<{ isOpen: boolean; friend: { id: string; name: string } | null }>({
+    isOpen: false,
+    friend: null
+  });
+
+  // Estado para o modal de confirmação de exclusão de pessoas de saúde
+  const [deleteSaudePersonConfirmModal, setDeleteSaudePersonConfirmModal] = useState<{ isOpen: boolean; person: { id: string; name: string } | null }>({
+    isOpen: false,
+    person: null
+  });
+
+  // Estados para o modal de edição de pessoas de saúde
+  const [isEditSaudePersonModalOpen, setIsEditSaudePersonModalOpen] = useState(false);
+  const [selectedSaudePersonForEdit, setSelectedSaudePersonForEdit] = useState<SaudePerson | null>(null);
+  
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { user, logout, isAdmin, isAdmin3, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports, loading } = useAuth();
+  const { user, logout, isAdmin, isAdmin3, isAdmin9, isAdminHitech, isMembro, isAmigo, isConvidado, canViewAllUsers, canViewOwnUsers, canViewStats, canGenerateLinks, canDeleteUsers, canExportReports, isFullAdmin, isFelipeCampaignA, canModifyLinkTypes, loading } = useAuth();
   const { features: planFeatures, loading: planFeaturesLoading } = usePlanFeatures();
   
-  // Função para verificar se usuário tem plano Saúde
+  // Função para verificar se usuário tem plano Pessoas
   const isSaudePlan = () => {
     return planFeatures.planName && (
-      planFeatures.planName.toLowerCase().includes('saúde') || 
-      planFeatures.planName.toLowerCase().includes('saude')
+      planFeatures.planName.toLowerCase().includes('pessoas')
     );
   };
 
@@ -199,7 +232,7 @@ export default function Dashboard() {
       }
       
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseServerless
           .from('campaigns')
           .select('primary_color, secondary_color')
           .eq('code', user.campaign)
@@ -266,18 +299,11 @@ export default function Dashboard() {
   const theme = getCampaignTheme();
 
   // Funções para verificar planos
-  const isValterPlan = () => {
-    return planFeatures.planName && planFeatures.planName.toLowerCase().includes('valter');
-  };
 
-  const isBLuxoPlan = () => {
-    return planFeatures.planName && planFeatures.planName.toLowerCase().includes('b luxo');
-  };
-
-  // Função para editar membro (disponível para todos os planos, exceto Felipe Admin)
+  // Função para editar membro (disponível para todos os administradores, incluindo Felipe da campanha A)
   const handleEditMember = (member: { id: string; name: string; [key: string]: unknown }) => {
-    // Felipe Admin não pode editar
-    if (user?.username?.toLowerCase() === 'felipe') {
+    // Felipe Admin (não da campanha A) não pode editar, mas Felipe da campanha A pode
+    if (user?.username?.toLowerCase() === 'felipe' && !isFelipeCampaignA()) {
       toast({
         title: "Acesso negado",
         description: "Felipe Admin não tem permissão para editar membros.",
@@ -286,21 +312,65 @@ export default function Dashboard() {
       return;
     }
     
-    // Navegar para a página de cadastro público com dados do membro
-    // Usar um linkId fictício para modo de edição
-    navigate('/cadastro/edit-member', { 
-      state: { 
-        editMode: true, 
-        memberData: member,
-        isMember: true
-      } 
-    });
+    // Verificar se é administrador ou membro
+    if (isAdmin()) {
+      // Administrador: usar modal
+      setSelectedMemberForEdit(member);
+      setIsEditModalOpen(true);
+    } else {
+      // Membro: usar página PublicRegister (lógica antiga)
+      navigate('/cadastro/edit-member', { 
+        state: { 
+          editMode: true, 
+          memberData: member,
+          isMember: true,
+          loggedUser: user // Passar informações do usuário logado
+        } 
+      });
+    }
   };
 
-  // Função para editar friend (disponível para todos os planos, exceto Felipe Admin)
+  // Função para fechar o modal de edição
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setSelectedMemberForEdit(null);
+  };
+
+  // Função para quando a edição for bem-sucedida
+  const handleEditSuccess = async () => {
+    try {
+      // Recarregar dados dos membros
+      await refetchMembers();
+      
+      // Recarregar estatísticas
+      await fetchStats();
+      
+      // Recarregar relatórios se tiver permissão
+      if (planFeatures.canViewReports) {
+        await fetchReportData();
+      }
+      
+      // Forçar re-render da tabela
+      setTableRefreshKey(prev => prev + 1);
+      
+      toast({
+        title: "Sucesso",
+        description: "Membro editado e dados atualizados com sucesso!",
+        variant: "default",
+      });
+    } catch (error) {
+      toast({
+        title: "Aviso",
+        description: "Membro editado, mas houve erro ao atualizar a tela.",
+        variant: "default",
+      });
+    }
+  };
+
+  // Função para editar friend (disponível para todos os administradores, incluindo Felipe da campanha A)
   const handleEditFriend = (friend: { id: string; name: string; [key: string]: unknown }) => {
-    // Felipe Admin não pode editar
-    if (user?.username?.toLowerCase() === 'felipe') {
+    // Felipe Admin (não da campanha A) não pode editar, mas Felipe da campanha A pode
+    if (user?.username?.toLowerCase() === 'felipe' && !isFelipeCampaignA()) {
       toast({
         title: "Acesso negado",
         description: "Felipe Admin não tem permissão para editar amigos.",
@@ -309,19 +379,45 @@ export default function Dashboard() {
       return;
     }
     
-    // Navegar para a página de cadastro público com dados do friend
-    // Usar um linkId fictício para modo de edição
-    navigate('/cadastro/edit-friend', { 
-      state: { 
-        editMode: true, 
-        memberData: friend,
-        isMember: false
-      } 
-    });
+    // Abrir modal de edição de amigo
+    setSelectedFriendForEdit(friend);
+    setIsEditFriendModalOpen(true);
+  };
+
+  // Função para fechar modal de edição de amigo
+  const handleCloseEditFriendModal = () => {
+    setIsEditFriendModalOpen(false);
+    setSelectedFriendForEdit(null);
+  };
+
+  // Função para quando a edição de amigo for bem-sucedida
+  const handleEditFriendSuccess = async () => {
+    try {
+      // Recarregar dados dos amigos
+      await fetchFriendsRanking();
+      
+      // Recarregar estatísticas
+      await fetchStats();
+      
+      // Forçar re-render da tabela
+      setTableRefreshKey(prev => prev + 1);
+      
+      toast({
+        title: "Sucesso",
+        description: "Amigo editado e dados atualizados com sucesso!",
+        variant: "default",
+      });
+    } catch (error) {
+      toast({
+        title: "Aviso",
+        description: "Amigo editado, mas houve erro ao atualizar a tela.",
+        variant: "default",
+      });
+    }
   };
 
   // Função para remover membro (soft delete - apenas administradores completos)
-  const handleRemoveMember = async (memberId: string, memberName: string) => {
+  const handleRemoveMember = (memberId: string, memberName: string) => {
     if (!canDeleteUsers()) {
       toast({
         title: "Acesso negado",
@@ -331,29 +427,104 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmRemove = window.confirm(
-      `Tem certeza que deseja excluir o membro "${memberName}"?`
-    );
+    setDeleteConfirmModal({
+      isOpen: true,
+      member: { id: memberId, name: memberName }
+    });
+  };
 
-    if (!confirmRemove) return;
+  const confirmDeleteMember = async () => {
+    if (!deleteConfirmModal.member) return;
 
     try {
-      // Usar a função de soft delete do hook useMembers
-      const result = await softDeleteMember(memberId);
+      const memberId = deleteConfirmModal.member.id;
+      const memberName = deleteConfirmModal.member.name;
+      const deletedAt = new Date().toISOString();
+
+      // 1. Buscar dados do membro para obter Instagram
+      const { data: memberData, error: fetchError } = await supabaseServerless
+        .from('members')
+        .select('instagram, is_friend')
+        .eq('id', memberId)
+        .single();
+
+      if (fetchError) {
+        throw new Error('Erro ao buscar dados do membro');
+      }
+
+      // 2. Soft delete em todas as tabelas relacionadas
       
-      if (result.success) {
+      // Atualizar tabela members
+      const { error: membersError } = await supabaseServerless
+        .from('members')
+        .update({ deleted_at: deletedAt })
+        .eq('id', memberId)
+        .select();
+
+      if (membersError) {
+        throw new Error('Erro ao excluir membro');
+      }
+
+      // Atualizar tabela users (se existir)
+      try {
+        await supabaseServerless
+          .from('users')
+          .update({ deleted_at: deletedAt })
+          .eq('instagram', memberData.instagram)
+          .select();
+      } catch (usersError) {
+        // Não é crítico se falhar na tabela users
+      }
+
+      // Atualizar tabela auth_users (se existir)
+      try {
+        await supabaseServerless
+          .from('auth_users')
+          .update({ deleted_at: deletedAt })
+          .eq('instagram', memberData.instagram)
+          .select();
+      } catch (authUsersError) {
+        // Não é crítico se falhar na tabela auth_users
+      }
+
+      // Atualizar tabela user_links (se existir)
+      try {
+        await supabaseServerless
+          .from('user_links')
+          .update({ deleted_at: deletedAt })
+          .eq('user_id', memberId)
+          .select();
+      } catch (userLinksError) {
+        // Não é crítico se falhar na tabela user_links
+      }
+
+      // Atualizar tabela friends (se for um amigo)
+      if (memberData.is_friend) {
+        try {
+          await supabaseServerless
+            .from('friends')
+            .update({ deleted_at: deletedAt })
+            .eq('member_id', memberId);
+        } catch (friendsError) {
+          // Não é crítico se falhar na tabela friends
+        }
+      }
+
+      // Atualizar ranking após exclusão (para recalcular posições)
+      await updateRanking();
+      
+      // Recarregar dados dos membros
+      await refetchMembers();
+      
         toast({
           title: "Membro excluído",
-          description: `O membro "${memberName}" foi excluído com sucesso.`,
-        });
-        
-        // Refresh automático dos relatórios e estatísticas
-        await fetchStats();
-        if (planFeatures.canViewReports) {
-          await fetchReportData();
-        }
-      } else {
-        throw new Error(result.error || 'Erro desconhecido');
+        description: `O membro "${memberName}" foi excluído com sucesso. Ranking atualizado.`,
+      });
+      
+      // Refresh automático dos relatórios e estatísticas
+      await fetchStats();
+      if (planFeatures.canViewReports) {
+        await fetchReportData();
       }
     } catch (error) {
       toast({
@@ -361,11 +532,17 @@ export default function Dashboard() {
         description: "Ocorreu um erro ao tentar excluir o membro. Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setDeleteConfirmModal({ isOpen: false, member: null });
     }
   };
 
-  // Função para remover amigo (soft delete - apenas administradores completos)
-  const handleRemoveFriend = async (friendId: string, friendName: string) => {
+  const cancelDeleteMember = () => {
+    setDeleteConfirmModal({ isOpen: false, member: null });
+  };
+
+  // Função para remover amigo (abre modal de confirmação)
+  const handleRemoveFriend = (friendId: string, friendName: string) => {
     if (!canDeleteUsers()) {
       toast({
         title: "Acesso negado",
@@ -375,41 +552,68 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmRemove = window.confirm(
-      `Tem certeza que deseja excluir o amigo "${friendName}"?`
-    );
+    setDeleteFriendConfirmModal({
+      isOpen: true,
+      friend: { id: friendId, name: friendName }
+    });
+  };
 
-    if (!confirmRemove) return;
+  // Função para confirmar exclusão do amigo
+  const confirmDeleteFriend = async () => {
+    if (!deleteFriendConfirmModal.friend) return;
 
     try {
+      const friendId = deleteFriendConfirmModal.friend.id;
+      const friendName = deleteFriendConfirmModal.friend.name;
+
+      // Usar a função do hook que já faz soft delete e atualiza contadores
       const result = await softDeleteFriend(friendId);
-      
+
       if (result.success) {
         toast({
-          title: "✅ Amigo excluído",
-          description: `O amigo "${friendName}" foi excluído com sucesso.`,
+          title: "Amigo excluído",
+          description: `O amigo "${friendName}" foi excluído com sucesso. Contratos e ranking atualizados.`,
         });
+        
+        // Recarregar dados dos membros para atualizar estatísticas
+        await refetchMembers();
         
         // Refresh automático dos relatórios e estatísticas
         await fetchStats();
+        
         if (planFeatures.canViewReports) {
           await fetchReportData();
         }
+        
+        // Recarregar também a lista de amigos
+        await fetchFriendsRanking();
       } else {
-        throw new Error(result.error || "Erro desconhecido");
+        console.error('❌ Erro ao excluir amigo:', result.error);
+        toast({
+          title: "Erro ao excluir amigo",
+          description: result.error || "Ocorreu um erro ao tentar excluir o amigo. Tente novamente.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      // Erro ao excluir amigo
+      console.error('❌ Erro na exclusão de amigo:', error);
       toast({
-        title: "❌ Erro ao excluir",
-        description: error instanceof Error ? error.message : "Erro ao excluir amigo",
+        title: "Erro ao excluir amigo",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao tentar excluir o amigo. Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setDeleteFriendConfirmModal({ isOpen: false, friend: null });
     }
   };
 
-  // Função para remover pessoa de saúde (soft delete - admin3 e plano Saúde)
-  const handleRemoveSaudePerson = async (personId: string, personName: string) => {
+  // Função para cancelar exclusão do amigo
+  const cancelDeleteFriend = () => {
+    setDeleteFriendConfirmModal({ isOpen: false, friend: null });
+  };
+
+  // Função para remover pessoa de saúde - abre modal de confirmação
+  const handleRemoveSaudePerson = (personId: string, personName: string) => {
     if (!isAdmin3() && !isSaudePlan()) {
       toast({
         title: "Acesso negado",
@@ -419,11 +623,19 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmRemove = window.confirm(
-      `Tem certeza que deseja excluir "${personName}"?`
-    );
+    // Abrir modal de confirmação
+    setDeleteSaudePersonConfirmModal({
+      isOpen: true,
+      person: { id: personId, name: personName }
+    });
+  };
 
-    if (!confirmRemove) return;
+  // Função para confirmar exclusão de pessoa de saúde
+  const confirmDeleteSaudePerson = async () => {
+    const personId = deleteSaudePersonConfirmModal.person?.id;
+    const personName = deleteSaudePersonConfirmModal.person?.name;
+
+    if (!personId || !personName) return;
 
     try {
       const success = await softDeleteSaudePerson(personId);
@@ -433,6 +645,9 @@ export default function Dashboard() {
           title: "✅ Pessoa excluída",
           description: `"${personName}" foi excluído(a) com sucesso.`,
         });
+        
+        // Fechar modal
+        setDeleteSaudePersonConfirmModal({ isOpen: false, person: null });
         
         // Refresh automático dos relatórios e estatísticas
         await fetchStats();
@@ -451,7 +666,12 @@ export default function Dashboard() {
     }
   };
 
-  // Função para editar pessoa de saúde - navega para PublicRegisterSaude com dados
+  // Função para cancelar exclusão de pessoa de saúde
+  const cancelDeleteSaudePerson = () => {
+    setDeleteSaudePersonConfirmModal({ isOpen: false, person: null });
+  };
+
+  // Função para editar pessoa de saúde - abre modal
   const handleEditSaudePerson = (person: SaudePerson) => {
     if (!isAdmin3() && !isSaudePlan()) {
       toast({
@@ -462,13 +682,24 @@ export default function Dashboard() {
       return;
     }
 
-    // Navegar para a página de cadastro com os dados da pessoa para edição
-    navigate('/cadastro-saude', { 
-      state: { 
-        editMode: true, 
-        personData: person 
-      } 
-    });
+    // Abrir modal de edição
+    setSelectedSaudePersonForEdit(person);
+    setIsEditSaudePersonModalOpen(true);
+  };
+
+  // Função para fechar modal de edição de pessoa de saúde
+  const handleCloseEditSaudePersonModal = () => {
+    setIsEditSaudePersonModalOpen(false);
+    setSelectedSaudePersonForEdit(null);
+  };
+
+  // Função chamada quando a edição é bem-sucedida
+  const handleEditSaudePersonSuccess = async () => {
+    await fetchSaudePeople();
+    await fetchStats();
+    if (planFeatures.canViewReports) {
+      await fetchReportData();
+    }
   };
 
   // Função para exportar pessoas de saúde para Excel
@@ -553,10 +784,8 @@ export default function Dashboard() {
     }
 
     try {
-      console.log('🔄 Iniciando toggle da campanha:', campaign.code, 'Status atual:', campaign.is_active);
       
       const result = await toggleCampaignStatus(campaign.code, campaign.is_active);
-      console.log('📊 Resultado do toggle da campanha:', result);
       
       if (result.success) {
         toast({
@@ -671,10 +900,8 @@ export default function Dashboard() {
     }
 
     try {
-      console.log('🔄 Iniciando toggle do admin:', adminId, 'Status atual:', currentStatus);
       
       const result = await toggleAdminStatus(adminId, currentStatus);
-      console.log('📊 Resultado do toggle do admin:', result);
       
       if (result.success) {
         toast({
@@ -703,20 +930,30 @@ export default function Dashboard() {
   // Admin veem todos os usuários (sem filtro)
   // - Outros roles: vê apenas usuários que eles indicaram (filtro por user.name para membros)
   const isAdminUser = isAdmin();
-  const referrerFilter = isAdminUser ? undefined : user?.name;
+  
+  // Extrair nome simples para filtrar (remover sufixos como "- Membro", "- Amigo", etc.)
+  const extractSimpleName = (fullName?: string): string | undefined => {
+    if (!fullName) return undefined;
+    const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+    return cleanName;
+  };
+  
+  const referrerFilter = isAdminUser ? undefined : extractSimpleName(user?.name);
   const userIdFilter = isAdminUser ? undefined : user?.id;
   
-  // Verificar se usuário está sendo detectado corretamente
-  // Verificar todas as funções de role
-  // Verificar o que está sendo passado para os hooks
-  // Verificar dados carregados
-  const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter, user?.campaign);
-  const { stats, loading: statsLoading, fetchStats } = useStats(referrerFilter, user?.campaign);
+  // Usar campaign_id quando disponível, caso contrário usar campaign (texto) para compatibilidade
+  // Para admin, usar campaign_id da campanha dele para filtrar os dados
+  const campaignFilter = user?.campaign_id || user?.campaign || null;
+  
+  const { users: allUsers, loading: usersLoading } = useUsers(referrerFilter, campaignFilter, user?.campaign_id);
+  const { stats, loading: statsLoading, fetchStats } = useStats(referrerFilter, campaignFilter, user?.campaign_id);
   const { reportData, loading: reportsLoading, fetchReportData } = useReports(
-    (planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? referrerFilter : undefined, 
-    (planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? user?.campaign : undefined
+    (isAdminUser || planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? referrerFilter : null, 
+    (isAdminUser || planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? campaignFilter : null,
+    (isAdminUser || planFeatures.canViewReports || planFeatures.canViewRecentRegistrations) ? user?.campaign_id : null
   );
-  const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter, user?.campaign);
+  
+  const { userLinks, createLink, loading: linksLoading } = useUserLinks(userIdFilter, campaignFilter, user?.campaign_id);
   
   // Novos hooks para o sistema de membros
   const { 
@@ -729,8 +966,10 @@ export default function Dashboard() {
     getTopMembers,
     getMembersByStatus,
     getMemberRole,
-    softDeleteMember
-  } = useMembers(referrerFilter, user?.campaign, planFeatures.maxMembers);
+    softDeleteMember,
+    updateRanking,
+    refetch: refetchMembers
+  } = useMembers(referrerFilter, campaignFilter, planFeatures.maxMembers, user?.campaign_id);
 
   // Hook para ranking de amigos
   const { 
@@ -738,8 +977,9 @@ export default function Dashboard() {
     loading: friendsLoading,
     error: friendsError,
     getFriendsStats,
-    softDeleteFriend
-  } = useFriendsRanking(user?.campaign);
+    softDeleteFriend,
+    fetchFriendsRanking
+  } = useFriendsRanking(campaignFilter, user?.campaign_id);
 
   
   
@@ -771,8 +1011,9 @@ export default function Dashboard() {
     people: saudePeople, 
     loading: saudePeopleLoading,
     softDeletePerson: softDeleteSaudePerson,
-    updateSaudePerson
-  } = useSaudePeople(user?.campaign);
+    updateSaudePerson,
+    fetchSaudePeople
+  } = useSaudePeople(user?.campaign, user?.campaign_id);
 
   // Hooks para AdminHitech - Campanhas e Admins
   const {
@@ -828,6 +1069,7 @@ export default function Dashboard() {
       return;
     }
 
+    try {
     const result = await createLink(user.id, user.full_name);
     
     if (result.success && result.data) {
@@ -840,36 +1082,43 @@ export default function Dashboard() {
       toast({
         title: "Link gerado e copiado!",
         description: `Link específico para ${user.name} foi copiado para a área de transferência.`,
-      });
-    } else {
-      // Verificar se é erro de limite atingido
-      if ('error' in result && result.error === 'LIMIT_REACHED') {
-        const limitResult = result as {
-          error: string;
-          limitType?: string;
-          current?: number;
-          max?: number;
-          planName?: string;
-        };
-        
-        const limitTypeText = limitResult.limitType === 'members' ? 'membros' : 'amigos';
-        const current = limitResult.current || 0;
-        const max = limitResult.max || 0;
-        const planName = limitResult.planName || 'atual';
-        
-        toast({
-          title: "⚠️ Limite Atingido",
-          description: `Limite de ${limitTypeText} atingido (${current}/${max}). Faça upgrade do plano ${planName} para continuar cadastrando.`,
-          variant: "destructive",
-          duration: 7000, // Exibir por 7 segundos
+        });
+      } else {
+        // Verificar se é erro de limite atingido
+        if ('error' in result && result.error === 'LIMIT_REACHED') {
+          const limitResult = result as {
+            error: string;
+            limitType?: string;
+            current?: number;
+            max?: number;
+            planName?: string;
+          };
+          
+          const limitTypeText = limitResult.limitType === 'members' ? 'membros' : 'amigos';
+          const current = limitResult.current || 0;
+          const max = limitResult.max || 0;
+          const planName = limitResult.planName || 'atual';
+          
+          toast({
+            title: "⚠️ Limite Atingido",
+            description: `Limite de ${limitTypeText} atingido (${current}/${max}). Faça upgrade do plano ${planName} para continuar cadastrando.`,
+            variant: "destructive",
+            duration: 7000, // Exibir por 7 segundos
       });
     } else {
       toast({
         title: "Erro ao gerar link",
         description: 'error' in result ? result.error : "Tente novamente.",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado. Tente novamente.",
         variant: "destructive",
       });
-      }
     }
   };
 
@@ -884,8 +1133,27 @@ export default function Dashboard() {
     // Se for membro (não admin), mostrar apenas membros vinculados a ele
     if (isMembro() && !isAdmin()) {
       // Verificar se o membro foi cadastrado através do link do usuário atual
-      // O referrer é salvo com o nome simples, então comparar principalmente com user.name
-      const isMatch = member.referrer === user?.name;
+      // Extrair nome simples do referrer para comparação
+      const extractSimpleName = (fullName: string): string => {
+        const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+        return cleanName;
+      };
+
+      const simpleReferrerName = extractSimpleName(member.referrer);
+      const simpleUserName = extractSimpleName(user?.name || '');
+      
+      // Comparar nome simples do referrer com nome simples do usuário
+      const isMatch = simpleReferrerName === simpleUserName;
+      
+      // Debug temporário
+      console.log("🔍 Debug Members Filter:", {
+        memberName: member.name,
+        memberReferrer: member.referrer,
+        simpleReferrerName,
+        userName: user?.name,
+        simpleUserName,
+        isMatch
+      });
       
       if (!isMatch) {
         return false;
@@ -942,8 +1210,17 @@ export default function Dashboard() {
     // Se for membro (não admin), mostrar apenas amigos vinculados a ele
     if (isMembro() && !isAdmin()) {
       // Verificar se o amigo foi cadastrado através do link do usuário atual
-      // O referrer é salvo com o nome simples, então comparar principalmente com user.name
-      const isMatch = friend.referrer === user?.name;
+      // Extrair nome simples do referrer para comparação
+      const extractSimpleName = (fullName: string): string => {
+        const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+        return cleanName;
+      };
+
+      const simpleReferrerName = extractSimpleName(friend.referrer);
+      const simpleUserName = extractSimpleName(user?.name || '');
+      
+      // Comparar nome simples do referrer com nome simples do usuário
+      const isMatch = simpleReferrerName === simpleUserName;
       
       if (!isMatch) {
         return false;
@@ -1000,6 +1277,9 @@ export default function Dashboard() {
 
   // Filtrar pessoas de saúde (admin3)
   const filteredSaudePeople = saudePeople.filter(person => {
+    // Filtrar por campaign_id do usuário logado (IMPORTANTE: isolamento entre campanhas)
+    const matchesCampaign = !user?.campaign_id || person.campaign_id === user.campaign_id;
+    
     const matchesSearch = saudeSearchTerm === "" || 
       person.lider_nome_completo.toLowerCase().includes(saudeSearchTerm.toLowerCase()) ||
       person.lider_whatsapp.includes(saudeSearchTerm.toLowerCase()) ||
@@ -1015,7 +1295,7 @@ export default function Dashboard() {
     const matchesLeader = saudeLeaderFilter === "" || 
       person.lider_nome_completo.toLowerCase().includes(saudeLeaderFilter.toLowerCase());
 
-    return matchesSearch && matchesPhone && matchesLeader;
+    return matchesCampaign && matchesSearch && matchesPhone && matchesLeader;
   }).sort((a, b) => {
     // Ordenar por data de criação (mais recente primeiro)
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -1090,18 +1370,129 @@ export default function Dashboard() {
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <span className={`${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'} font-medium`}>Bem-vindo, {user?.name || quickUserData?.name || 'Usuário'}</span>
-                <div className="text-sm text-muted-foreground">{user?.role || quickUserData?.role || 'Membro'}</div>
-                {planFeatures.planName && (user?.campaign?.toLowerCase() !== 'hitech' && user?.username?.toLowerCase() !== 'adminhitech' && !planFeatures.planName.toLowerCase().includes('valter') && !planFeatures.planName.toLowerCase().includes('saúde') && !planFeatures.planName.toLowerCase().includes('saude') && user?.campaign?.toLowerCase() !== 'b' && user?.username?.toLowerCase() !== 'admin_b') && (
-                  <div className="text-xs text-muted-foreground">
-                    Plano: {planFeatures.planName}
-                    <span className="ml-1 text-orange-600">
-                      {planFeatures.maxMembers < 999999 && planFeatures.maxFriends < 999999 ? 
-                        `(${planFeatures.maxMembers + planFeatures.maxFriends} cadastros)` :
-                        `(Ilimitado)`
-                      }
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center justify-end gap-2">
+                  <span className="text-sm text-muted-foreground">{user?.role || quickUserData?.role || 'Membro'}</span>
+                  {/* Botão de editar para membros (não administradores) - do lado esquerdo do role */}
+                  {!isAdmin() && (isMembro() || isAmigo() || isConvidado()) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          // Estratégia 1: Busca por username na tabela auth_users e depois no members
+                          let currentMember = null;
+                          
+                          if (user?.username) {
+                            // Buscar na tabela auth_users primeiro para obter dados completos
+                            const { data: authUserData, error: authError } = await supabaseServerless
+                              .from('auth_users')
+                              .select('*')
+                              .eq('username', user.username)
+                              .single();
+                            
+                            if (authUserData && !authError) {
+                              // Agora buscar na tabela members usando os dados do auth_users
+                              const { data: memberData, error: memberError } = await supabaseServerless
+                                .from('members')
+                                .select('*')
+                                .eq('name', authUserData.name)
+                                .eq('status', 'Ativo')
+                                .is('deleted_at', null)
+                                .single();
+                              
+                              if (memberData && !memberError) {
+                                currentMember = memberData;
+                              } else {
+                                // Tentar busca alternativa por nome limpo
+                                const cleanAuthName = authUserData.name.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+                                
+                                const { data: memberDataClean, error: memberErrorClean } = await supabaseServerless
+                                  .from('members')
+                                  .select('*')
+                                  .eq('name', cleanAuthName)
+                                  .eq('status', 'Ativo')
+                                  .is('deleted_at', null)
+                                  .single();
+                                
+                                if (memberDataClean && !memberErrorClean) {
+                                  currentMember = memberDataClean;
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Estratégia 2: Se não encontrou, tentar busca local nos dados já carregados
+                          if (!currentMember) {
+                            currentMember = members.find(m => {
+                              // 1. Comparação exata de nomes
+                              if (m.name === user?.name) {
+                                return true;
+                              }
+                              
+                              // 2. Comparação sem sufixos
+                              const cleanAuthUserName = (user?.name || '').replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+                              const cleanMemberName = m.name.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+                              
+                              if (cleanAuthUserName === cleanMemberName) {
+                                return true;
+                              }
+                              
+                              // 3. Comparação por contém
+                              if (m.name.toLowerCase().includes(cleanAuthUserName.toLowerCase()) || 
+                                  cleanAuthUserName.toLowerCase().includes(cleanMemberName.toLowerCase())) {
+                                return true;
+                              }
+                              
+                              // 4. Comparação por username
+                              if (user?.username && m.name.toLowerCase().includes(user.username.toLowerCase())) {
+                                return true;
+                              }
+                              
+                              return false;
+                            });
+                          }
+                          
+                          // Estratégia 3: Busca direta no banco se ainda não encontrou
+                          if (!currentMember && user?.name) {
+                            const { data: directMemberData, error: directError } = await supabaseServerless
+                              .from('members')
+                              .select('*')
+                              .ilike('name', `%${user.name}%`)
+                              .eq('status', 'Ativo')
+                              .is('deleted_at', null)
+                              .limit(1);
+                            
+                            if (directMemberData && directMemberData.length > 0 && !directError) {
+                              currentMember = directMemberData[0];
+                            }
+                          }
+                          
+                          if (currentMember) {
+                            handleEditMember(currentMember as unknown as { id: string; name: string; [key: string]: unknown });
+                          } else {
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível encontrar seus dados para edição. Verifique se você está cadastrado como membro.",
+                              variant: "destructive",
+                            });
+                          }
+                        } catch (error) {
+                          toast({
+                            title: "Erro",
+                            description: "Ocorreu um erro ao buscar seus dados. Tente novamente.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="text-white border-0 text-xs px-2 py-1 h-6"
+                      style={{ backgroundColor: '#16A34A' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
+                    >
+                      <Settings className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <Button
                 onClick={handleLogout}
@@ -1193,7 +1584,7 @@ export default function Dashboard() {
           </div>
             )}
             
-            {(canGenerateLinks() || isAdminUser) && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && (
+            {(canGenerateLinks() || isFullAdmin()) && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && (
           <div className="flex flex-col sm:flex-row gap-3">
             {canGenerateLinks() && (
             <Button
@@ -1201,77 +1592,83 @@ export default function Dashboard() {
                 className={`${user?.campaign === 'B' ? 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue' : 'bg-institutional-gold hover:bg-institutional-gold/90 text-institutional-blue'} font-medium`}
             >
               <Share2 className="w-4 h-4 mr-2" />
-                Gerar e Copiar Link
+                Link
             </Button>
             )}
             
             
-            {isAdminUser && planFeatures.canViewReports && planFeatures.canExport && (
+          </div>
+          )}
+        </div>
+
+        {/* Botão de Exportar Dados do Relatório - Separado do botão de gerar link */}
+        {isAdmin() && planFeatures.canExport && !isSaudePlan() && (
+          <div className="flex flex-col sm:flex-row gap-3 mt-3">
               <Button
                 onClick={() => {
                   try {
                     // Verificar se há dados para exportar
-                    if (!memberStats || !reportData) {
-                      toast({
-                        title: "⚠️ Dados não carregados",
-                        description: "Aguarde o carregamento dos dados antes de exportar",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
+                  if (!memberStats || !reportData) {
+                    toast({
+                      title: "⚠️ Dados não carregados",
+                      description: "Aguarde o carregamento dos dados antes de exportar",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
 
-                    // Verificar se há dados nos relatórios
-                    const hasReportData = reportData && (
-                      Object.keys(reportData.usersByLocation || {}).length > 0 ||
-                      Object.keys(reportData.usersByCity || {}).length > 0 ||
-                      Object.keys(reportData.sectorsGroupedByCity || {}).length > 0 ||
-                      (reportData.registrationsByDay || []).length > 0 ||
-                      (reportData.usersByStatus || []).length > 0 ||
-                      (reportData.recentActivity || []).length > 0
-                    );
+                  // Verificar se há dados nos relatórios
+                  const hasReportData = reportData && (
+                    Object.keys(reportData.usersByLocation || {}).length > 0 ||
+                    Object.keys(reportData.usersByCity || {}).length > 0 ||
+                    Object.keys(reportData.sectorsGroupedByCity || {}).length > 0 ||
+                    (reportData.registrationsByDay || []).length > 0 ||
+                    (reportData.usersByStatus || []).length > 0 ||
+                    (reportData.recentActivity || []).length > 0
+                  );
 
-                    if (!hasReportData) {
+                  if (!hasReportData) {
                       toast({
                         title: "⚠️ Nenhum dado para exportar",
-                        description: "Não há dados nos relatórios para exportar. Cadastre membros primeiro.",
+                      description: "Não há dados nos relatórios para exportar. Cadastre membros primeiro.",
                         variant: "destructive",
                       });
                       return;
                     }
 
-                    // Verificar se há membros cadastrados
-                    if (memberStats.total_members === 0 && memberStats.current_member_count === 0) {
-                      toast({
-                        title: "⚠️ Nenhum membro cadastrado",
-                        description: "Não é possível gerar um relatório sem membros cadastrados",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
+                  // Verificar se há membros cadastrados
+                  if (!memberStats || !memberStats.total_members || memberStats.total_members === 0) {
+                    toast({
+                      title: "⚠️ Nenhum membro cadastrado",
+                      description: "Não é possível gerar um relatório sem membros cadastrados",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
 
-                    // Calcular Top 5 Membros (usando dados reais da tabela members)
-                    const topMembersData = members
-                      .filter(member => 
-                        member.status === 'Ativo' && 
-                        !member.deleted_at && 
-                        member.name.toLowerCase() !== 'admin'
-                      )
-                      .sort((a, b) => {
-                        // Primeiro: mais contratos
-                        if (b.contracts_completed !== a.contracts_completed) {
-                          return b.contracts_completed - a.contracts_completed;
-                        }
-                        // Empate: membro mais antigo primeiro
-                        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                      })
+                  // Preparar dados dos top membros para o PDF
+                  const topMembersData = members
+                    .filter(member => 
+                      member.status === 'Ativo' && 
+                      !member.deleted_at && 
+                      member.name.toLowerCase() !== 'admin'
+                    )
+                    .sort((a, b) => {
+                      // Primeiro: mais contratos
+                      if (b.contracts_completed !== a.contracts_completed) {
+                        return b.contracts_completed - a.contracts_completed;
+                      }
+                      // Empate: membro mais antigo primeiro
+                      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                    })
                         .slice(0, 5)
-                      .map((member, index) => ({ 
+                    .map((member, index) => ({ 
                           position: index + 1, 
-                        member: member.name, 
-                        count: member.contracts_completed 
+                      member: member.name, 
+                      count: member.contracts_completed 
                         }));
 
-                    exportReportDataToPDF(reportData as unknown as Record<string, unknown>, memberStats as unknown as Record<string, unknown>, topMembersData);
+                  exportReportDataToPDF(reportData as unknown as Record<string, unknown>, (memberStats || {}) as unknown as Record<string, unknown>, topMembersData);
                     toast({
                       title: "✅ PDF exportado",
                       description: "Arquivo PDF com dados do relatório foi baixado com sucesso!",
@@ -1289,24 +1686,21 @@ export default function Dashboard() {
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Exportar Dados do Relatório
               </Button>
-            )}
-            
           </div>
           )}
-        </div>
 
         {userLink && !isSaudePlan() && (
           <div className="mt-4 p-3 bg-institutional-light rounded-lg border border-institutional-gold/30">
             <p className="text-sm text-institutional-blue font-medium mb-1">
-              {isAdminUser ? 'Link para cadastro de Membro:' : 'Seu link único:'}
+              {isFullAdmin() ? 'Link para cadastro de Membro:' : 'Seu link único:'}
             </p>
             <code className="text-xs break-all text-muted-foreground">{userLink}</code>
           </div>
         )}
       </div>
 
-        {/* Controle de Tipo de Links - Apenas Administradores (exceto plano Saúde) */}
-        {isAdmin() && !isSaudePlan() && (
+        {/* Controle de Tipo de Links - Apenas Administradores (exceto plano Saúde e Felipe) */}
+        {canModifyLinkTypes() && !isSaudePlan() && (
           <Card className={`shadow-[var(--shadow-card)] border-l-4 ${user?.campaign === 'B' ? 'border-l-blue-500' : 'border-l-blue-500'} mb-6`}>
             <CardHeader>
               <CardTitle className={`flex items-center gap-2 ${user?.campaign === 'B' ? 'text-institutional-blue' : 'text-institutional-blue'}`}>
@@ -1368,14 +1762,21 @@ export default function Dashboard() {
                 <div className="p-4 rounded-lg border bg-green-50 border-green-200">
                   <h4 className="font-semibold mb-3 flex items-center gap-2" style={{ color: '#14446C' }}>
                     <CalendarDays className="w-4 h-4" style={{ color: '#14446C' }} />
-                    Plano: {planFeatures.planName}
+                    Contratos Pagos
                   </h4>
                   <p className="text-sm mb-3" style={{ color: '#14446C' }}>
                     Acesse o histórico completo de suas cobranças, pagamentos e faturas.
                   </p>
                   <Button
                     size="sm"
-                    onClick={() => navigate('/paid-contracts')}
+                    onClick={() => {
+                      // TODO: Implementar funcionalidade do histórico de cobranças
+                      toast({
+                        title: "Em desenvolvimento",
+                        description: "Funcionalidade de histórico de cobranças será implementada em breve.",
+                        variant: "default",
+                      });
+                    }}
                     className="bg-green-600 hover:bg-green-700 text-white font-medium text-sm"
                   >
                     Ver Histórico de Cobranças
@@ -1476,7 +1877,7 @@ export default function Dashboard() {
   
 
         {/* Gráficos de Estatísticas - Primeira Linha (Apenas Administradores, exceto plano Saúde) */}
-        {isAdmin() && planFeatures.canViewReports && !isSaudePlan() && (
+        {isAdmin() && !isSaudePlan() && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Usuários por Localização */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1560,7 +1961,7 @@ export default function Dashboard() {
         )}
 
         {/* Gráficos de Estatísticas - Segunda Linha (Apenas Administradores, exceto plano Saúde) */}
-        {isAdmin() && planFeatures.canViewReports && !isSaudePlan() && (
+        {isAdmin() && !isSaudePlan() && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           {/* Gráfico de Barras - Pessoas Cadastradas por Cidade */}
           <Card className="shadow-[var(--shadow-card)]">
@@ -1621,7 +2022,7 @@ export default function Dashboard() {
                           {count}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {((count / memberStats.total_members) * 100).toFixed(1)}%
+                          {memberStats?.total_members ? ((count / memberStats.total_members) * 100).toFixed(1) : '0'}%
                         </div>
                       </div>
                     </div>
@@ -1667,13 +2068,13 @@ export default function Dashboard() {
           </Card>
             )}
 
-            {/* Top 5 Membros - Apenas para planos Valter e B Luxo */}
+            {/* Top 100 Membros */}
             {planFeatures.canViewTopMembers && (
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-institutional-blue">
                 <Users className="w-5 h-5" />
-                    Top 5 - Membros
+                    Top 100 - Membros
               </CardTitle>
               <CardDescription>
                 Ranking dos membros que mais cadastraram amigos
@@ -1687,7 +2088,8 @@ export default function Dashboard() {
                         .filter(member => 
                           member.status === 'Ativo' && 
                           !member.deleted_at && 
-                          member.name.toLowerCase() !== 'admin'
+                          member.name.toLowerCase() !== 'admin' &&
+                          member.contracts_completed > 0
                         )
                         .sort((a, b) => {
                           // Primeiro: mais contratos
@@ -1697,7 +2099,7 @@ export default function Dashboard() {
                           // Empate: membro mais antigo primeiro
                           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
                         })
-                    .slice(0, 5)
+                    .slice(0, 100)
                         .map((member, index) => ({ 
                       position: index + 1, 
                           member: member.name, 
@@ -1716,7 +2118,7 @@ export default function Dashboard() {
                   }
 
                   return (
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                    <div key={tableRefreshKey} className="space-y-3 max-h-[300px] overflow-y-auto">
                           {activeMembers.map((item) => (
                         <div 
                           key={item.member} 
@@ -1772,7 +2174,7 @@ export default function Dashboard() {
 
 
         {/* Novos Reports - Engagement Rate e Registration Count (Apenas Administradores) */}
-        {isAdmin() && planFeatures.canViewReports && (
+        {isAdmin() && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
           </div>
         )}
@@ -1781,7 +2183,7 @@ export default function Dashboard() {
         {!isAdmin() && !isAdmin3() && !isAdminHitech() && !isSaudePlan() && (
           <div className="mb-8">
             {/* Seu Link Atual */}
-            {userLink && (
+            {userLink ? (
               <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-green-500 mb-6">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-institutional-blue">
@@ -1817,6 +2219,41 @@ export default function Dashboard() {
                                 ? 'Links servem para cadastrar membros'
                                 : 'Links servem para cadastrar amigos'
                               }
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-yellow-500 mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-institutional-blue">
+                    <LinkIcon className="w-5 h-5" />
+                    Seu Link de Cadastro
+                  </CardTitle>
+                  <CardDescription>
+                    Nenhum link foi gerado ainda
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <h4 className="font-semibold text-yellow-800 mb-2">
+                        ⚠️ Nenhum Link Disponível
+                      </h4>
+                      <p className="text-yellow-700 text-sm mb-3">
+                        Você ainda não possui um link de cadastro. Clique no botão "Gerar e Copiar Link" acima para criar seu link único.
+                      </p>
+                      <div className="bg-white p-3 rounded border border-yellow-300">
+                        <div className="text-center">
+                          <h4 className="font-semibold text-gray-800 mb-2">Status Atual</h4>
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                            <span className="text-sm text-gray-700">
+                              Aguardando geração de link
                             </span>
                           </div>
                         </div>
@@ -1922,15 +2359,17 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-4">
               
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-institutional-gold">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
-                  <p className="text-2xl font-bold text-institutional-blue">{memberStats?.total_members || 0}</p>
+                  <p className="text-2xl font-bold text-institutional-blue">
+                    {filteredMembers.filter(m => !m.quemindicou && !m.telefonequemindicou).length}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                        {memberStats?.current_member_count || 0} / {planFeatures.maxMembers < 999999 ? planFeatures.maxMembers : '∞'}
+                        {filteredMembers.filter(m => !m.quemindicou && !m.telefonequemindicou).length} / {planFeatures.maxMembers < 999999 ? planFeatures.maxMembers : '∞'}
                   </p>
                 </div>
                 <div className="p-3 rounded-full bg-institutional-light">
@@ -1939,6 +2378,25 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {user?.username?.toLowerCase() !== 'admin_b' && (
+          <Card className="shadow-[var(--shadow-card)] border-l-4 border-l-orange-500">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total de Membros sem Indicação</p>
+                  <p className="text-2xl font-bold text-orange-600">{memberStats?.members_with_referrer_name || 0}</p>
+                  <p className="text-xs text-muted-foreground">
+                  
+                  </p>
+                </div>
+                <div className="p-3 rounded-full bg-orange-50">
+                  <UserCheck className="w-6 h-6 text-orange-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          )}
             </div>
 
             {/* Cards adicionais para plano Avançado (exceto plano Saúde) */}
@@ -2024,13 +2482,11 @@ export default function Dashboard() {
             </CardTitle>
             <CardDescription>
               {isAdminUser
-                ? (planFeatures.planName && (planFeatures.planName.toLowerCase().includes('valter') || planFeatures.planName.toLowerCase().includes('b luxo')))
-                ? "Ranking completo de todos os membros cadastrados no sistema"
-                  : "Lista completa de todos os membros cadastrados no sistema"
+                ? "Lista completa de todos os membros cadastrados no sistema"
                 : "Membros que você cadastrou através do seu link"
               }
             </CardDescription>
-            {isAdmin() && planFeatures.canViewReports && planFeatures.canExport && (
+            {isAdmin() && planFeatures.canExport && (
               <div className="flex gap-2 mt-4">
                 <Button
                   size="sm"
@@ -2174,7 +2630,7 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Filtro de Status - apenas para planos Valter e B Luxo */}
+            {/* Filtro de Status */}
             {planFeatures.canViewRankingColumns && (
             <div className="relative">
               <TrendingUp className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -2208,16 +2664,11 @@ export default function Dashboard() {
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Instagram</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cidade</th>
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Setor</th>
+                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Total de Membros</th>
                   {planFeatures.canViewRankingColumns && (
-                    <>
-                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos</th>
-                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
-                    </>
+                  <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Contratos/Status</th>
                   )}
                   <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Indicado por</th>
-                  {canDeleteUsers() && (
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
-                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2242,8 +2693,30 @@ export default function Dashboard() {
                         <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
                           <UserIcon className="w-4 h-4 text-institutional-gold" />
                         </div>
-                        <div>
-                          <span className="font-medium text-institutional-blue">{member.name}</span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-institutional-blue">{member.name}</span>
+                            {isAdmin() && (user?.username?.toLowerCase() !== 'felipe' || isFelipeCampaignA()) && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleEditMember(member)}
+                                  className="w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
+                                  title="Editar membro"
+                                >
+                                  ✏️
+                                </button>
+                                {canDeleteUsers() && (
+                                  <button
+                                    onClick={() => handleRemoveMember(member.id, member.name)}
+                                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                                    title="Excluir membro"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <div className="text-xs text-gray-500">
                             {getMemberRole(member)}
                           </div>
@@ -2279,21 +2752,35 @@ export default function Dashboard() {
                         <span className="text-sm">{member.sector}</span>
                       </div>
                     </td>
+                    <td className="py-3 px-4">
+                        <span className="font-bold text-institutional-blue">
+                        {members.filter(m => {
+                          // Função para extrair nome simples (remove sufixos como "- Membro", "- Amigo", etc.)
+                          const extractSimpleName = (fullName: string): string => {
+                            const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+                            return cleanName.toLowerCase();
+                          };
+                          
+                          const simpleReferrerName = extractSimpleName(m.referrer);
+                          const simpleMemberName = extractSimpleName(member.name);
+                          
+                          // Conta quantos membros têm este membro como referrer (comparação flexível)
+                          return (simpleReferrerName === simpleMemberName || m.referrer === member.name) && 
+                                 m.id !== member.id && // Evita auto-referência
+                                 !m.is_friend && 
+                                 m.campaign === member.campaign &&
+                                 m.status === 'Ativo' && 
+                                 !m.deleted_at;
+                        }).length}
+                        </span>
+                    </td>
                     {planFeatures.canViewRankingColumns && (
-                      <>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-institutional-blue">
                           {member.contracts_completed}/15
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
                         <span className="text-lg">{getRankingStatusIcon(member.ranking_status)}</span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRankingStatusColor(member.ranking_status)}`}>
-                          {member.ranking_status}
-                        </span>
                         {member.can_be_replaced && (
                           <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
                             SUBSTITUÍVEL
@@ -2301,41 +2788,11 @@ export default function Dashboard() {
                         )}
                       </div>
                     </td>
-                      </>
                     )}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <UserIcon className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm text-institutional-gold font-medium">{member.referrer}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        {user?.username?.toLowerCase() !== 'felipe' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditMember(member)}
-                            className="text-white border-0"
-                            style={{ backgroundColor: '#16A34A' }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                          >
-                            <Settings className="w-4 h-4 mr-1" />
-                            Editar
-                          </Button>
-                        )}
-                        {canDeleteUsers() && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleRemoveMember(member.id, member.name)}
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                          >
-                            <UserIcon className="w-4 h-4 mr-1" />
-                            Excluir
-                          </Button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -2479,7 +2936,7 @@ export default function Dashboard() {
                 : "Amigos que você cadastrou através do seu link"
               }
             </CardDescription>
-            {planFeatures.canViewReports && planFeatures.canExport && (
+            {isAdmin() && planFeatures.canExport && (
             <div className="flex gap-2 mt-4">
               <Button
                 size="sm"
@@ -2634,9 +3091,6 @@ export default function Dashboard() {
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Cidade</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Setor</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Indicado por</th>
-                    {canDeleteUsers() && (
-                      <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Ações</th>
-                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -2647,8 +3101,30 @@ export default function Dashboard() {
                           <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-institutional-gold" />
                           </div>
-                          <div>
-                            <span className="font-medium text-institutional-blue">{friend.name}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-institutional-blue">{friend.name}</span>
+                              {isAdmin() && user?.username?.toLowerCase() !== 'felipe' && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleEditFriend(friend)}
+                                    className="w-6 h-6 bg-green-500 hover:bg-green-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
+                                    title="Editar amigo"
+                                  >
+                                    ✏️
+                                  </button>
+                                  {canDeleteUsers() && (
+                                    <button
+                                      onClick={() => handleRemoveFriend(friend.id, friend.name)}
+                                      className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                                      title="Excluir amigo"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-500">
                               Amigo
                             </div>
@@ -2691,35 +3167,6 @@ export default function Dashboard() {
                             <span className="text-sm font-medium">{friend.member_name}</span>
                             <div className="text-xs text-gray-500">Membro</div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          {user?.username?.toLowerCase() !== 'felipe' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditFriend(friend)}
-                              className="text-white border-0"
-                              style={{ backgroundColor: '#16A34A' }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              Editar
-                            </Button>
-                          )}
-                          {canDeleteUsers() && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleRemoveFriend(friend.id, friend.name)}
-                              className="bg-red-600 hover:bg-red-700 text-white"
-                            >
-                              <UserIcon className="w-4 h-4 mr-1" />
-                              Excluir
-                            </Button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -2872,7 +3319,7 @@ export default function Dashboard() {
             </div>
 
             {/* Botões de Exportação */}
-            {planFeatures.canViewReports && planFeatures.canExport && (
+            {(isAdmin() || isSaudePlan()) && planFeatures.canViewReports && planFeatures.canExport && (
             <div className="mb-4 flex gap-2">
               <Button
                 onClick={() => exportSaudePeopleToExcel()}
@@ -2904,7 +3351,6 @@ export default function Dashboard() {
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-48">Cidade</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-56">Observações</th>
                     <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-28">Data</th>
-                    <th className="text-left py-3 px-4 font-semibold text-institutional-blue w-24">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2915,7 +3361,29 @@ export default function Dashboard() {
                           <div className="w-8 h-8 bg-institutional-gold/10 rounded-full flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-institutional-gold" />
                           </div>
-                          <span className="font-medium text-institutional-blue">{person.lider_nome_completo}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-institutional-blue">{person.lider_nome_completo}</span>
+                            {isAdmin() && user?.username?.toLowerCase() !== 'felipe' && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleEditSaudePerson(person)}
+                                  className="w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
+                                  title="Editar pessoa"
+                                >
+                                  ✏️
+                                </button>
+                                {canDeleteUsers() && (
+                                  <button
+                                    onClick={() => handleRemoveSaudePerson(person.id, person.pessoa_nome_completo)}
+                                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                                    title="Excluir pessoa"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -2963,31 +3431,6 @@ export default function Dashboard() {
                           <span className="text-sm">
                             {new Date(person.created_at).toLocaleDateString('pt-BR')}
                           </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditSaudePerson(person)}
-                            className="text-white border-0"
-                            style={{ backgroundColor: '#16A34A' }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#15803D'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#16A34A'}
-                          >
-                            <Settings className="w-4 h-4 mr-1" />
-                            Editar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleRemoveSaudePerson(person.id, person.pessoa_nome_completo)}
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                          >
-                            <UserIcon className="w-4 h-4 mr-1" />
-                            Excluir
-                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -3263,6 +3706,7 @@ export default function Dashboard() {
                     <thead>
                       <tr className="border-b border-institutional-light">
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Nome</th>
+                        <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Role</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Campanha</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Status</th>
                         <th className="text-left py-3 px-4 font-semibold text-institutional-blue">Data de Criação</th>
@@ -3293,6 +3737,11 @@ export default function Dashboard() {
                                   (DESATIVADO)
                                 </span>
                               )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {admin.role || 'Administrador'}
+                              </span>
                             </td>
                             <td className="py-3 px-4">
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-institutional-gold/20 text-institutional-blue">
@@ -3432,10 +3881,8 @@ export default function Dashboard() {
                             <button
                               onClick={async () => {
                                 try {
-                                  console.log('🔄 Iniciando toggle do plano:', plano.id, 'Status atual:', plano.is_active);
                                   
                                   const result = await togglePlanoStatus(plano.id, plano.is_active);
-                                  console.log('📊 Resultado do toggle:', result);
                                   
                                   if (result.success) {
                                     toast({
@@ -3503,6 +3950,186 @@ export default function Dashboard() {
         )}
 
       </main>
+      
+      {/* Botão flutuante WhatsApp - Apenas para membros */}
+      {!isAdmin() && (isMembro() || isAmigo() || isConvidado()) && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+          {/* Texto do lado do botão */}
+          <div className="bg-white rounded-lg px-3 py-2 shadow-lg border border-gray-200">
+            <p className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Chame o Agente para dúvidas!!
+            </p>
+          </div>
+          
+          {/* Botão WhatsApp */}
+          <Button
+            onClick={() => {
+              // Número do WhatsApp do agente
+              const whatsappNumber = "556281261293";
+              const message = encodeURIComponent("Olá! Preciso de ajuda com o sistema.");
+              const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${message}`;
+              window.open(whatsappUrl, '_blank');
+            }}
+            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl transition-all duration-300"
+            style={{ 
+              backgroundColor: user?.campaign === 'B' ? '#CFBA7F' : '#16A34A',
+              border: 'none'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = user?.campaign === 'B' ? '#B8A366' : '#15803D';
+              e.currentTarget.style.transform = 'scale(1.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = user?.campaign === 'B' ? '#CFBA7F' : '#16A34A';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <svg 
+              className="w-8 h-8 text-white" 
+              fill="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.893 3.488"/>
+            </svg>
+          </Button>
+        </div>
+      )}
+
+      {/* Modal de Edição */}
+      <EditMemberModal
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        memberData={selectedMemberForEdit}
+        onSuccess={handleEditSuccess}
+      />
+
+      {/* Modal de Edição de Amigo */}
+      <EditFriendModal
+        isOpen={isEditFriendModalOpen}
+        onClose={handleCloseEditFriendModal}
+        friendData={selectedFriendForEdit}
+        onSuccess={handleEditFriendSuccess}
+      />
+
+      {/* Modal de Edição de Pessoa de Saúde */}
+      <EditSaudePersonModal
+        isOpen={isEditSaudePersonModalOpen}
+        onClose={handleCloseEditSaudePersonModal}
+        person={selectedSaudePersonForEdit}
+        onSuccess={handleEditSaudePersonSuccess}
+      />
+
+      {/* Modal de Confirmação de Exclusão de Pessoa de Saúde */}
+      <Dialog open={deleteSaudePersonConfirmModal.isOpen} onOpenChange={cancelDeleteSaudePerson}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700 mb-4">
+              Tem certeza que deseja excluir a pessoa <strong>"{deleteSaudePersonConfirmModal.person?.name}"</strong>?
+            </p>
+            <p className="text-sm text-red-600 mb-4">
+              ⚠️ Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={cancelDeleteSaudePerson}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteSaudePerson}
+            >
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão de Membro */}
+      <Dialog open={deleteConfirmModal.isOpen} onOpenChange={cancelDeleteMember}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700 mb-4">
+              Tem certeza que deseja excluir o membro <strong>"{deleteConfirmModal.member?.name}"</strong>?
+            </p>
+            <p className="text-sm text-red-600 mb-4">
+              ⚠️ Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={cancelDeleteMember}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteMember}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão de Amigo */}
+      <Dialog open={deleteFriendConfirmModal.isOpen} onOpenChange={cancelDeleteFriend}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Confirmar Exclusão de Amigo
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700 mb-4">
+              Tem certeza que deseja excluir o amigo <strong>"{deleteFriendConfirmModal.friend?.name}"</strong>?
+            </p>
+            <p className="text-sm text-orange-600 mb-4">
+              ⚠️ .
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={cancelDeleteFriend}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteFriend}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Excluir Amigo
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

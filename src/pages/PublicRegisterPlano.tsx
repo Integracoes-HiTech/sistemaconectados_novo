@@ -7,7 +7,7 @@ import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Package, DollarSign, CheckCircle, AlertCircle, Users } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabaseServerless } from "@/lib/supabase";
 import {
   Select,
   SelectContent,
@@ -171,14 +171,10 @@ export default function PublicRegisterPlano() {
       };
 
       // Debug temporário
-      console.log('📋 Dados que serão salvos:', planoDataToSave);
-      console.log('📋 FormData:', formData);
-      console.log('📋 EditMode:', editMode);
-      console.log('📋 PlanoData:', planoData);
 
       if (editMode && planoData) {
         // MODO DE EDIÇÃO - Atualizar plano existente
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseServerless
           .from('planos_precos')
           .update(planoDataToSave)
           .eq('id', planoData.id);
@@ -204,7 +200,7 @@ export default function PublicRegisterPlano() {
 
       } else {
         // MODO DE CRIAÇÃO - Criar novo plano
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseServerless
           .from('planos_precos')
           .insert([{
             ...planoDataToSave,

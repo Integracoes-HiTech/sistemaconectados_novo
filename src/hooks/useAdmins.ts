@@ -1,6 +1,6 @@
 // hooks/useAdmins.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface AdminUser {
   id: string
@@ -26,17 +26,21 @@ export const useAdmins = () => {
       setLoading(true)
       setError(null)
 
-      // Buscar todos os usuários com roles administrativos:
-      // Admin, Administrador, admin3, AdminHitech, Felipe Admin, etc.
-      const { data, error: fetchError } = await supabase
+      // Buscar apenas usuários com role "Administrador" exatamente
+      const { data, error: fetchError } = await supabaseServerless
         .from('auth_users')
         .select('*')
-        .or('role.eq.Admin,role.eq.Administrador,role.eq.admin3,role.eq.AdminHitech,role.ilike.%admin%,role.ilike.%felipe%')
+        .eq('role', 'Administrador')
         .order('created_at', { ascending: false })
 
       if (fetchError) throw fetchError
 
-      setAdmins(data || [])
+      // Garantir que data é um array
+      const adminsArray = Array.isArray(data) ? data : (data ? [data] : [])
+      
+      // Para AdminHitech, mostrar TODOS os admins (ativos, inativos e também com deleted_at)
+      // A visualização na tabela já mostra com risco quando deleted_at existe
+      setAdmins(adminsArray)
     } catch (err) {
       console.error('Erro ao buscar admins:', err)
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
@@ -51,10 +55,13 @@ export const useAdmins = () => {
 
   const deleteAdmin = async (adminId: string) => {
     try {
-      const { error: deleteError } = await supabase
+      // Soft delete - preencher deleted_at
+      const deletedAt = new Date().toISOString()
+      const { error: deleteError } = await supabaseServerless
         .from('auth_users')
-        .delete()
+        .update({ deleted_at: deletedAt })
         .eq('id', adminId)
+        .select()
 
       if (deleteError) throw deleteError
 
@@ -71,10 +78,11 @@ export const useAdmins = () => {
 
   const toggleAdminStatus = async (adminId: string, currentStatus: boolean) => {
     try {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseServerless
         .from('auth_users')
         .update({ is_active: !currentStatus })
         .eq('id', adminId)
+        .select()
 
       if (updateError) throw updateError
 

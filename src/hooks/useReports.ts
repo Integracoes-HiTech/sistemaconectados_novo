@@ -1,6 +1,6 @@
 // hooks/useReports.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 interface Member {
   id: string
@@ -39,7 +39,7 @@ export interface ReportData {
   usersByCity: Record<string, number>
 }
 
-export const useReports = (referrer?: string, campaign?: string) => {
+export const useReports = (referrer?: string, campaign?: string, campaignId?: string | null) => {
   const [reportData, setReportData] = useState<ReportData>({
     usersByLocation: {},
     registrationsByDay: [],
@@ -57,29 +57,56 @@ export const useReports = (referrer?: string, campaign?: string) => {
       setLoading(true)
       setError(null)
 
+      // Usar campaign_id passado como parâmetro, ou buscar se só tiver campaign (código)
+      let finalCampaignId: string | null = campaignId || null;
+      if (!finalCampaignId && campaign) {
+        try {
+          const { data: campaignData, error: campaignError } = await supabaseServerless
+            .from('campaigns')
+            .select('id')
+            .eq('code', campaign)
+            .single();
+          
+          if (!campaignError && campaignData?.id) {
+            finalCampaignId = campaignData.id;
+          }
+        } catch (err) {
+          // Se falhar ao buscar campaign_id, continuar sem ele (vai usar campaign texto)
+        }
+      }
+
       // Query base para membros (tabela principal atual)
-      let query = supabase.from('members').select('*').is('deleted_at', null)
+      let query = supabaseServerless.from('members').select('*')
       
       if (referrer) {
         query = query.eq('referrer', referrer)
       }
       
-      if (campaign) {
+      // Usar campaign_id se disponível, caso contrário usar campaign (texto) para compatibilidade
+      if (finalCampaignId) {
+        query = query.eq('campaign_id', finalCampaignId)
+      } else if (campaign) {
         query = query.eq('campaign', campaign)
       }
 
-      const { data: members, error } = await query
+      const { data: membersData, error } = await query
 
       if (error) throw error
 
+      // Garantir que data é um array
+      const membersArray = Array.isArray(membersData) ? membersData : (membersData ? [membersData] : [])
+      
+      // Filtrar membros não excluídos no frontend
+      const members = membersArray.filter(member => !member.deleted_at)
+
       // Calcular dados para relatórios usando membros
-      const usersByLocation = calculateUsersByLocation(members || [])
-      const registrationsByDay = calculateRegistrationsByDay(members || [])
-      const usersByStatus = calculateUsersByStatus(members || [])
-      const recentActivity = calculateRecentActivity(members || [])
-      const sectorsByCity = calculateSectorsByCity(members || [])
-      const sectorsGroupedByCity = calculateSectorsGroupedByCity(members || [])
-      const usersByCity = calculateUsersByCity(members || [])
+      const usersByLocation = calculateUsersByLocation(members)
+      const registrationsByDay = calculateRegistrationsByDay(members)
+      const usersByStatus = calculateUsersByStatus(members)
+      const recentActivity = calculateRecentActivity(members)
+      const sectorsByCity = calculateSectorsByCity(members)
+      const sectorsGroupedByCity = calculateSectorsGroupedByCity(members)
+      const usersByCity = calculateUsersByCity(members)
 
       setReportData({
         usersByLocation,
@@ -95,7 +122,7 @@ export const useReports = (referrer?: string, campaign?: string) => {
     } finally {
       setLoading(false)
     }
-  }, [referrer, campaign])
+  }, [referrer, campaign, campaignId])
 
   useEffect(() => {
     // Limpar estado anterior antes de buscar novos dados

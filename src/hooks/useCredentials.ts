@@ -1,6 +1,6 @@
 // hooks/useCredentials.ts
 import { useState } from 'react'
-import { supabase, AuthUser } from '@/lib/supabase'
+import { supabaseServerless, AuthUser } from '@/lib/supabase'
 
 export interface Credentials {
   username: string
@@ -40,7 +40,7 @@ export const useCredentials = () => {
       setLoading(true)
 
       // Verificar se a fase de contratos pagos está ativa
-      const { data: phaseData } = await supabase
+      const { data: phaseData } = await supabaseServerless
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'paid_contracts_phase_active')
@@ -55,7 +55,7 @@ export const useCredentials = () => {
       // Se tem referrer, verificar o role do referrer
       if (userData.referrer) {
         // Buscar dados do referrer para determinar role
-        const { data: referrerData } = await supabase
+        const { data: referrerData } = await supabaseServerless
           .from('auth_users')
           .select('role, name')
           .eq('full_name', userData.referrer)
@@ -92,14 +92,13 @@ export const useCredentials = () => {
         name: userData.name,
         role: userRole,
         full_name: fullName,
-        display_name: userData.display_name || null,
         instagram: userData.instagram,
         phone: userData.phone,
         is_active: true, // Usuários criados ficam ativos por padrão
         campaign: userData.campaign || 'A' // Usar campanha do usuário ou padrão A
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('auth_users')
         .insert([authUserData])
         .select()
@@ -120,15 +119,18 @@ export const useCredentials = () => {
   // Verificar se username já existe
   const checkUsernameExists = async (username: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('auth_users')
         .select('username')
         .eq('username', username)
-        .single()
 
-      if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+      if (error) {
+        return { exists: false, error: error.message }
+      }
       
-      return { exists: !!data }
+      const exists = data && Array.isArray(data) && data.length > 0;
+      
+      return { exists }
     } catch (err) {
       return { 
         exists: false, 

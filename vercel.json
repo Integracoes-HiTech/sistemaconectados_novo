@@ -1,58 +1,11 @@
 {
-  "redirects": [
-    {
-      "source": "/comece-agora.html",
-      "destination": "/comece-agora",
-      "permanent": true
-    },
-    {
-      "source": "/success.html",
-      "destination": "/success",
-      "permanent": true
-    },
-    {
-      "source": "/landing.html",
-      "destination": "/comece-agora",
-      "permanent": true
-    },
-    {
-      "source": "/sucesso.html",
-      "destination": "/success",
-      "permanent": true
+  "functions": {
+    "api/x7k9m2p4/*.js": {
+      "runtime": "nodejs18.x"
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/comece-agora",
-      "destination": "/comece-agora.html"
-    },
-    {
-      "source": "/success",
-      "destination": "/success.html"
-    },
-    { 
-      "source": "/(.*)", 
-      "destination": "/" 
-    }
-  ],
-  "headers": [
-    {
-      "source": "/comece-agora",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600"
-        }
-      ]
-    },
-    {
-      "source": "/success",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600"
-        }
-      ]
-    }
-  ]
+  },
+  "env": {
+    "SUPABASE_URL": "https://zveysullpsdopcwsncai.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y"
+  }
 }

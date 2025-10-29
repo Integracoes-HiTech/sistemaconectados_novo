@@ -1,6 +1,6 @@
 // hooks/usePlanos.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface Plano {
   id: string
@@ -26,7 +26,7 @@ export const usePlanos = () => {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await supabaseServerless
         .from('planos_precos')
         .select('*')
         .order('order_display', { ascending: true })
@@ -51,7 +51,7 @@ export const usePlanos = () => {
       const newStatus = !currentStatus;
       const now = new Date().toISOString();
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseServerless
         .from('planos_precos')
         .update({ 
           is_active: newStatus,

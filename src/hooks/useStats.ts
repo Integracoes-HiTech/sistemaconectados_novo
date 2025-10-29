@@ -1,8 +1,8 @@
 // hooks/useStats.ts
 import { useState, useEffect } from 'react'
-import { supabase, Stats } from '@/lib/supabase'
+import { supabaseServerless, Stats } from '@/lib/supabase'
 
-export const useStats = (referrer?: string, campaign?: string) => {
+export const useStats = (referrer?: string, campaign?: string, campaignId?: string | null) => {
   const [stats, setStats] = useState<Stats>({
     total_users: 0,
     active_users: 0,
@@ -24,50 +24,59 @@ export const useStats = (referrer?: string, campaign?: string) => {
     })
     setError(null)
     fetchStats()
-  }, [referrer, campaign])
+  }, [referrer, campaign, campaignId])
 
   const fetchStats = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      // Query base para usuários
-      let query = supabase.from('users').select('*')
+      // Query base para membros (tabela principal)
+      let query = supabaseServerless.from('members').select('*')
       
       if (referrer) {
         query = query.eq('referrer', referrer)
       }
       
-      if (campaign) {
+      // Usar campaign_id se disponível (relacional), caso contrário usar campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (campaign) {
         query = query.eq('campaign', campaign)
       }
 
-      const { data: users, error } = await query
+      const { data: members, error } = await query
 
       if (error) throw error
 
+      // Filtrar apenas membros não excluídos e ativos
+      const activeMembers = (members || []).filter((member: any) => 
+        !member.deleted_at && member.status === 'Ativo'
+      )
+
       // Calcular estatísticas
-      const totalUsers = users?.length || 0
-      const activeUsers = users?.filter(user => user.status === 'Ativo').length || 0
+      const totalUsers = activeMembers.length || 0
+      const activeUsers = activeMembers.length || 0
       
-      // Usuários dos últimos 7 dias
+      // Membros dos últimos 7 dias
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
       
-      const recentRegistrations = users?.filter(user => {
-        const regDate = new Date(user.registration_date)
+      const recentRegistrations = activeMembers.filter((member: any) => {
+        const regDate = new Date(member.registration_date || member.created_at)
         return regDate >= sevenDaysAgo
       }).length || 0
 
-      // Usuários cadastrados hoje
+      // Membros cadastrados hoje
       const today = new Date()
       const todayStr = today.toISOString().split('T')[0] // Formato YYYY-MM-DD
       
-      const todayRegistrations = users?.filter(user => {
-        return user.registration_date === todayStr
+      const todayRegistrations = activeMembers.filter((member: any) => {
+        const regDate = new Date(member.registration_date || member.created_at)
+        return regDate.toISOString().split('T')[0] === todayStr
       }).length || 0
 
-      // Taxa de engajamento (usuários ativos / total)
+      // Taxa de engajamento (membros ativos / total)
       const engagementRate = totalUsers > 0 ? (activeUsers / totalUsers) * 100 : 0
 
       setStats({

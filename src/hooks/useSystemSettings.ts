@@ -1,6 +1,6 @@
 // hooks/useSystemSettings.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface SystemSettings {
   max_members: number
@@ -37,7 +37,7 @@ export const useSystemSettings = () => {
       setLoading(true)
       setError(null)
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('system_settings')
         .select('setting_key, setting_value')
 
@@ -101,7 +101,7 @@ export const useSystemSettings = () => {
 
   const fetchPhases = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('phase_control')
         .select('*')
         .order('created_at', { ascending: true })
@@ -116,7 +116,7 @@ export const useSystemSettings = () => {
 
   const updateSetting = async (key: string, value: string | number | boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseServerless
         .from('system_settings')
         .update({ 
           setting_value: value.toString(),
@@ -140,7 +140,7 @@ export const useSystemSettings = () => {
 
   const updatePhase = async (phaseName: string, updates: Partial<PhaseControl>) => {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseServerless
         .from('phase_control')
         .update({ 
           ...updates,
@@ -167,7 +167,7 @@ export const useSystemSettings = () => {
       const today = new Date().toISOString().split('T')[0]
       
       // Ativar fase de contratos pagos
-      const { error: phaseError } = await supabase
+      const { error: phaseError } = await supabaseServerless
         .from('phase_control')
         .update({ 
           is_active: true,
@@ -179,7 +179,7 @@ export const useSystemSettings = () => {
       if (phaseError) throw phaseError
 
       // Atualizar configuração da fase
-      const { error: settingError } = await supabase
+      const { error: settingError } = await supabaseServerless
         .from('system_settings')
         .update({ 
           setting_value: 'true',
@@ -190,7 +190,7 @@ export const useSystemSettings = () => {
       if (settingError) throw settingError
 
       // Alterar automaticamente o tipo de links para 'friends'
-      const { error: linksError } = await supabase
+      const { error: linksError } = await supabaseServerless
         .from('system_settings')
         .update({ 
           setting_value: 'friends',
@@ -215,63 +215,45 @@ export const useSystemSettings = () => {
 
   const updateMemberLinksType = async (linkType: 'members' | 'friends', userCampaign?: string) => {
     try {
-      // NOVA VERSÃO DA FUNÇÃO updateMemberLinksType INICIADA
-      // updateMemberLinksType chamada
-      // Tipo de link recebido
-      // Timestamp
-      // Versão da função: 2.0 - COM LOGS DETALHADOS
-      
       // 1. Verificar configuração atual antes de alterar
-      // Verificando configuração atual
-      const { data: currentSettings, error: fetchError } = await supabase
+      const { data: currentSettings, error: fetchError } = await supabaseServerless
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'member_links_type')
         .single();
 
       if (fetchError) {
-        // Erro ao buscar configuração atual
         throw fetchError;
       }
 
-      // Configuração atual
-      // Nova configuração
-      
       // 2. Atualizar configuração do sistema
-      // Atualizando configuração do sistema
-      const { error } = await supabase
+      const { data: updateData, error } = await supabaseServerless
         .from('system_settings')
         .update({ setting_value: linkType })
         .eq('setting_key', 'member_links_type')
+        .select('setting_key, setting_value')
 
       if (error) {
-        // Erro na atualização da configuração
         throw error;
       }
 
-      // Configuração do sistema atualizada
 
       // Buscar todos os administradores para excluir da atualização
-      // Buscando todos os administradores
-      const { data: adminUsers, error: adminError } = await supabase
+      const { data: adminUsers, error: adminError } = await supabaseServerless
         .from('auth_users')
         .select('id, username, full_name, role')
-        .or('role.eq.Administrador,role.eq.admin,username.eq.wegneycosta,username.eq.felipe,username.eq.admin_b');
+        .eq('role', 'Administrador');
 
       if (adminError) {
-        // Erro ao buscar administradores
         throw adminError;
       }
 
       const adminIds = adminUsers?.map(admin => admin.id) || [];
-      // Administradores encontrados
 
       // 4. Verificar links existentes antes de atualizar (filtrar por campanha se especificada)
-      // Verificando links existentes
-      let existingLinksQuery = supabase
+      let existingLinksQuery = supabaseServerless
         .from('user_links')
-        .select('id, user_id, link_type, campaign')
-        .not('user_id', 'in', `(${adminIds.join(',')})`);
+        .select('id, user_id, link_type, campaign');
 
       // Se campanha do usuário foi especificada, filtrar apenas essa campanha
       if (userCampaign) {
@@ -281,79 +263,74 @@ export const useSystemSettings = () => {
       const { data: existingLinks, error: linksFetchError } = await existingLinksQuery;
 
       if (linksFetchError) {
-        // Erro ao buscar links existentes
         throw linksFetchError;
       }
 
-      // Links existentes
-      // Links por tipo
+
+      // Filtrar links que não são de administradores
+      const filteredLinks = existingLinks?.filter(link => {
+        const isAdmin = adminIds.includes(link.user_id);
+        return !isAdmin;
+      }) || [];
+      
 
       // Se mudando para 'friends', atualizar links existentes
       if (linkType === 'friends') {
-        // Atualizando links existentes para friends
         
-        let updateQuery = supabase
-          .from('user_links')
-          .update({ 
-            link_type: 'friends',
-            updated_at: new Date().toISOString()
-          })
-          .eq('link_type', 'members')
-          .not('user_id', 'in', `(${adminIds.join(',')})`); // Excluir todos os administradores
+        // Atualizar apenas links que não são de administradores
+        const linksToUpdate = filteredLinks.filter(link => link.link_type === 'members');
+        
+        if (linksToUpdate.length > 0) {
+          const linkIds = linksToUpdate.map(link => link.id);
+          
+          const { data: updateResult, error: linksError } = await supabaseServerless
+            .from('user_links')
+            .update({ 
+              link_type: 'friends',
+              updated_at: new Date().toISOString()
+            })
+            .in('id', linkIds)
+            .select('id, user_id, link_type');
 
-        // Se campanha do usuário foi especificada, filtrar apenas essa campanha
-        if (userCampaign) {
-          updateQuery = updateQuery.eq('campaign', userCampaign);
+          if (linksError) {
+            throw linksError;
+          }
+
+        } else {
         }
-
-        const { data: updateResult, error: linksError } = await updateQuery
-          .select('id, user_id, link_type');
-
-        if (linksError) {
-          // Erro ao atualizar links existentes
-          throw linksError;
-        }
-
-        // Links atualizados para friends
-        // Resultado da atualização
       }
 
       // Se mudando para 'members', atualizar links existentes
       if (linkType === 'members') {
-        // Atualizando links existentes para members (exceto admin)
         
-        let updateQuery = supabase
-          .from('user_links')
-          .update({ 
-            link_type: 'members',
-            updated_at: new Date().toISOString()
-          })
-          .eq('link_type', 'friends')
-          .not('user_id', 'in', `(${adminIds.join(',')})`); // Excluir todos os administradores
+        // Atualizar apenas links que não são de administradores
+        const linksToUpdate = filteredLinks.filter(link => link.link_type === 'friends');
+        
+        if (linksToUpdate.length > 0) {
+          const linkIds = linksToUpdate.map(link => link.id);
+          
+          const { data: updateResult, error: linksError } = await supabaseServerless
+            .from('user_links')
+            .update({ 
+              link_type: 'members',
+              updated_at: new Date().toISOString()
+            })
+            .in('id', linkIds)
+            .select('id, user_id, link_type');
 
-        // Se campanha do usuário foi especificada, filtrar apenas essa campanha
-        if (userCampaign) {
-          updateQuery = updateQuery.eq('campaign', userCampaign);
+          if (linksError) {
+            throw linksError;
+          }
+
+        } else {
         }
-
-        const { data: updateResult, error: linksError } = await updateQuery
-          .select('id, user_id, link_type');
-
-        if (linksError) {
-          // Erro ao atualizar links existentes
-          throw linksError;
-        }
-
-        // Links atualizados para members
-        // Resultado da atualização
       }
       
       // 7. Verificar resultado final
       // Verificando resultado final
-      let finalLinksQuery = supabase
+      let finalLinksQuery = supabaseServerless
         .from('user_links')
-        .select('id, user_id, link_type, campaign')
-        .not('user_id', 'in', `(${adminIds.join(',')})`);
+        .select('id, user_id, link_type, campaign');
 
       // Se campanha do usuário foi especificada, filtrar apenas essa campanha
       if (userCampaign) {
@@ -365,18 +342,20 @@ export const useSystemSettings = () => {
       if (finalError) {
         // Erro ao verificar resultado final
       } else {
+        // Filtrar links que não são de administradores
+        const finalFilteredLinks = finalLinks?.filter(link => 
+          !adminIds.includes(link.user_id)
+        ) || [];
+        
         // Links finais (exceto admin)
         // Links finais por tipo
       }
       
       // Recarregar configurações
-      // Recarregando configurações
       await fetchSettings()
       
-      // updateMemberLinksType concluída com sucesso
       return { success: true }
     } catch (err) {
-      // Erro geral no updateMemberLinksType
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Não foi possivel atualizar tipo de links' 
@@ -387,7 +366,7 @@ export const useSystemSettings = () => {
   const deactivatePaidContractsPhase = async () => {
     try {
       // Desativar fase de contratos pagos
-      const { error: phaseError } = await supabase
+      const { error: phaseError } = await supabaseServerless
         .from('phase_control')
         .update({ 
           is_active: false,
@@ -399,7 +378,7 @@ export const useSystemSettings = () => {
       if (phaseError) throw phaseError
 
       // Atualizar configuração da fase
-      const { error: settingError } = await supabase
+      const { error: settingError } = await supabaseServerless
         .from('system_settings')
         .update({ 
           setting_value: 'false',
@@ -410,7 +389,7 @@ export const useSystemSettings = () => {
       if (settingError) throw settingError
 
       // Alterar automaticamente o tipo de links para 'members'
-      const { error: linksError } = await supabase
+      const { error: linksError } = await supabaseServerless
         .from('system_settings')
         .update({ 
           setting_value: 'members',
@@ -435,7 +414,7 @@ export const useSystemSettings = () => {
 
   const checkMemberLimit = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('phase_control')
         .select('current_count, max_limit')
         .eq('phase_name', 'members_registration')
@@ -544,6 +523,13 @@ export const useSystemSettings = () => {
   }, [fetchSettings, fetchPhases])
 
 
+  const updateSettingsLocal = (updates: Partial<SystemSettings>) => {
+    setSettings(prevSettings => ({
+      ...prevSettings,
+      ...updates
+    }));
+  };
+
   return {
     settings,
     phases,
@@ -554,6 +540,7 @@ export const useSystemSettings = () => {
     activatePaidContractsPhase,
     deactivatePaidContractsPhase,
     updateMemberLinksType,
+    updateSettingsLocal,
     checkMemberLimit,
     getPhaseStatus,
     isPhaseActive,

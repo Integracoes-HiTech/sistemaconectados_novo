@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { User, Lock, Tag, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabaseServerless } from "@/lib/supabase";
 import {
   Select,
   SelectContent,
@@ -62,7 +62,7 @@ export default function PublicRegisterAdmin() {
   useEffect(() => {
     const fetchCampanhas = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseServerless
           .from('campaigns')
           .select('code, name')
           .eq('is_active', true)
@@ -192,7 +192,7 @@ export default function PublicRegisterAdmin() {
           updateData.password = formData.password;
         }
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseServerless
           .from('auth_users')
           .update(updateData)
           .eq('id', adminData.id);
@@ -214,11 +214,15 @@ export default function PublicRegisterAdmin() {
       } else {
         // MODO DE CRIAÇÃO - Criar novo admin
         // Verificar se o username já existe
-        const { data: existingAdmin, error: checkError } = await supabase
+        const { data: existingAdminData, error: checkError } = await supabaseServerless
           .from('auth_users')
           .select('id')
-          .eq('username', formData.username)
-          .maybeSingle();
+          .eq('username', formData.username);
+        
+        // maybeSingle não existe, então pegamos o primeiro resultado
+        const existingAdmin = Array.isArray(existingAdminData) && existingAdminData.length > 0 
+          ? existingAdminData[0] 
+          : null;
 
         if (checkError && checkError.code !== 'PGRST116') {
           throw checkError;
@@ -235,7 +239,7 @@ export default function PublicRegisterAdmin() {
         }
 
         // Criar o novo admin
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseServerless
           .from('auth_users')
           .insert([
             {
@@ -245,7 +249,6 @@ export default function PublicRegisterAdmin() {
               role: 'Administrador',
               campaign: formData.campaign,
               full_name: `Admin ${formData.name}`,
-              display_name: formData.name,
               is_active: true
             }
           ]);

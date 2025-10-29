@@ -1,6 +1,6 @@
 // hooks/useMembers.ts
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseServerless } from '@/lib/supabase'
 
 export interface Member {
   id: string
@@ -11,6 +11,8 @@ export interface Member {
   city: string
   sector: string
   referrer: string
+  quemindicou?: string | null // ← Campo para quem indicou (nome da coluna no banco)
+  telefonequemindicou?: string | null // ← Telefone de quem indicou (nome da coluna no banco)
   registration_date: string
   status: 'Ativo' | 'Inativo'
   // Dados da segunda pessoa (obrigatório - regra da dupla)
@@ -33,6 +35,7 @@ export interface Member {
   created_at: string
   updated_at: string
   campaign: string
+  campaign_id?: string | null // ← ID da campanha (adicionado)
 }
 
 export interface MemberStats {
@@ -44,6 +47,7 @@ export interface MemberStats {
   current_member_count: number
   max_member_limit: number
   can_register_more: boolean
+  members_with_referrer_name: number
 }
 
 export interface SystemSettings {
@@ -55,9 +59,19 @@ export interface SystemSettings {
   paid_contracts_start_date: string
 }
 
-export const useMembers = (referrer?: string, campaign?: string, maxMembers: number = 1500) => {
+export const useMembers = (referrer?: string, campaign?: string, maxMembers: number = 1500, campaignId?: string | null) => {
   const [members, setMembers] = useState<Member[]>([])
-  const [memberStats, setMemberStats] = useState<MemberStats | null>(null)
+  const [memberStats, setMemberStats] = useState<MemberStats>({
+    total_members: 0,
+    green_members: 0,
+    yellow_members: 0,
+    red_members: 0,
+    top_1500_members: 0,
+    current_member_count: 0,
+    max_member_limit: maxMembers,
+    can_register_more: true,
+    members_with_referrer_name: 0
+  })
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,69 +82,115 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
       setError(null)
 
       // Query base para membros - filtrar apenas os não excluídos
-      let query = supabase.from('members').select('*').is('deleted_at', null)
+      let query = supabaseServerless.from('members').select('*')
       
       if (referrer) {
         query = query.eq('referrer', referrer)
       }
       
-      if (campaign) {
+      // Usar campaign_id se disponível (relacional), caso contrário usar campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (campaign) {
         query = query.eq('campaign', campaign)
       }
 
       const { data: membersData, error: membersError } = await query
       if (membersError) throw membersError
 
-      setMembers(membersData || [])
+      // Garantir que data é um array
+      const membersDataArray = Array.isArray(membersData) ? membersData : (membersData ? [membersData] : [])
+      
+      // Filtrar membros não excluídos no frontend
+      let activeMembers = membersDataArray.filter((member: any) => !member.deleted_at)
+      
+      // Se houver referrer, filtrar também por comparação de nome simples
+      if (referrer) {
+        const extractSimpleName = (fullName: string): string => {
+          const cleanName = fullName.replace(/\s*-\s*(Membro|Amigo|Administrador|Admin).*$/i, '').trim();
+          return cleanName;
+        };
+        
+        const simpleReferrerName = extractSimpleName(referrer);
+        
+        activeMembers = activeMembers.filter((member: any) => {
+          const simpleMemberReferrer = extractSimpleName(member.referrer);
+          return simpleMemberReferrer === simpleReferrerName || member.referrer === referrer;
+        });
+      }
+      
+      setMembers(activeMembers)
+      
+      // Recarregar estatísticas após carregar membros
+      await fetchMemberStats()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar membros')
     } finally {
       setLoading(false)
     }
-  }, [referrer, campaign])
+  }, [referrer, campaign, campaignId])
 
   const fetchMemberStats = useCallback(async () => {
     try {
-      // Se não há campanha especificada, usar a view global
-      if (!campaign) {
-        const { data, error } = await supabase
-          .from('v_system_stats')
-          .select('*')
-          .single()
-
-        if (error) throw error
-
-        const stats: MemberStats = {
-          total_members: data.total_members || 0,
-          green_members: data.green_members || 0,
-          yellow_members: data.yellow_members || 0,
-          red_members: data.red_members || 0,
-          top_1500_members: data.top_1500_members || 0,
-          current_member_count: data.current_member_count || 0,
-        max_member_limit: data.max_member_limit || maxMembers,
-        can_register_more: (data.current_member_count || 0) < (data.max_member_limit || maxMembers)
-        }
-
-        setMemberStats(stats)
-        return
+      // Se não há campanha especificada (nem campaign nem campaignId), usar a view global
+      if (!campaign && !campaignId) {
+        return;
       }
 
       // Filtrar por campanha específica
-      const { data: membersData, error } = await supabase
+      let query = supabaseServerless
         .from('members')
-        .select('ranking_status, contracts_completed, is_top_1500')
-        .eq('campaign', campaign)
-        .eq('status', 'Ativo')
-        .is('deleted_at', null)
+        .select('ranking_status, contracts_completed, is_top_1500, status, deleted_at, quemindicou, telefonequemindicou')
+      
+      // Usar campaign_id se disponível (relacional), caso contrário usar campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (campaign) {
+        query = query.eq('campaign', campaign)
+      }
+      
+      const { data: membersData, error } = await query
 
       if (error) throw error
 
+      // Garantir que data é um array
+      const membersDataArray = Array.isArray(membersData) ? membersData : (membersData ? [membersData] : [])
+      
+      // Se não há dados, retornar estatísticas padrão
+      if (membersDataArray.length === 0) {
+        const defaultStats: MemberStats = {
+          total_members: 0,
+          green_members: 0,
+          yellow_members: 0,
+          red_members: 0,
+          top_1500_members: 0,
+          current_member_count: 0,
+          max_member_limit: maxMembers,
+          can_register_more: true,
+          members_with_referrer_name: 0
+        };
+        setMemberStats(defaultStats);
+        return;
+      }
+
+      // Filtrar membros ativos e não excluídos no frontend
+      const activeMembers = membersDataArray.filter((member: any) => 
+        !member.deleted_at && member.status === 'Ativo'
+      )
+
       // Calcular estatísticas da campanha
-      const totalMembers = membersData?.length || 0
-      const greenMembers = membersData?.filter(m => m.ranking_status === 'Verde').length || 0
-      const yellowMembers = membersData?.filter(m => m.ranking_status === 'Amarelo').length || 0
-      const redMembers = membersData?.filter(m => m.ranking_status === 'Vermelho').length || 0
-      const top1500Members = membersData?.filter(m => m.is_top_1500).length || 0
+      const totalMembers = activeMembers.length
+      const greenMembers = activeMembers.filter(m => m.ranking_status === 'Verde').length
+      const yellowMembers = activeMembers.filter(m => m.ranking_status === 'Amarelo').length
+      const redMembers = activeMembers.filter(m => m.ranking_status === 'Vermelho').length
+      const top1500Members = activeMembers.filter(m => m.is_top_1500).length
+      // Contar membros COM indicação (pelo menos um dos campos quemindicou ou telefonequemindicou preenchido)
+      const membersWithReferrer = activeMembers.filter((m: any) => 
+        (m.quemindicou && typeof m.quemindicou === 'string' && m.quemindicou.trim() !== '') || 
+        (m.telefonequemindicou && typeof m.telefonequemindicou === 'string' && m.telefonequemindicou.trim() !== '')
+      ).length
+      // Membros SEM indicação = Total - Membros COM indicação
+      const membersWithoutReferrer = totalMembers - membersWithReferrer
 
       const stats: MemberStats = {
         total_members: totalMembers,
@@ -140,18 +200,32 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         top_1500_members: top1500Members,
         current_member_count: totalMembers,
         max_member_limit: maxMembers,
-        can_register_more: totalMembers < maxMembers
+        can_register_more: totalMembers < maxMembers,
+        members_with_referrer_name: membersWithReferrer
       }
 
       setMemberStats(stats)
     } catch (err) {
-      // Erro ao carregar estatísticas dos membros
+      // Em caso de erro, definir estatísticas padrão
+      const defaultStats: MemberStats = {
+        total_members: 0,
+        green_members: 0,
+        yellow_members: 0,
+        red_members: 0,
+        top_1500_members: 0,
+        current_member_count: 0,
+        max_member_limit: maxMembers,
+        can_register_more: true,
+        members_with_referrer_name: 0
+      };
+      
+      setMemberStats(defaultStats);
     }
-  }, [campaign])
+  }, [campaign, campaignId, maxMembers])
 
   const fetchSystemSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('system_settings')
         .select('setting_key, setting_value')
 
@@ -198,10 +272,10 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
 
   const addMember = async (memberData: Omit<Member, 'id' | 'created_at' | 'updated_at' | 'contracts_completed' | 'ranking_position' | 'ranking_status' | 'is_top_1500' | 'can_be_replaced'>) => {
     try {
-      // Hook useMembers - Dados recebidos
+      console.log('📝 Hook useMembers - Dados recebidos:', memberData);
       
-      // Inserindo membro no banco
-      const insertData = {
+      // Preparar dados para inserção - garantir que todos os campos obrigatórios estão presentes
+      const insertData: Record<string, unknown> = {
         ...memberData,
         contracts_completed: 0,
         ranking_status: 'Vermelho',
@@ -210,23 +284,76 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         is_friend: memberData.is_friend || false
       };
       
-      // Dados para inserção
+      // Lista de campos válidos na tabela members (campos que realmente existem)
+      const validFields = [
+        'name', 'phone', 'instagram', 'cep', 'city', 'sector', 
+        'referrer', 'quemindicou', 'telefonequemindicou', 'registration_date', 'status', 'campaign', 'campaign_id',
+        'couple_name', 'couple_phone', 'couple_instagram', 'couple_cep', 
+        'couple_city', 'couple_sector',
+        'contracts_completed', 'ranking_status', 'is_top_1500', 
+        'can_be_replaced', 'is_friend', 'deleted_at'
+      ];
+      
+      // Mapear campos do código para nomes do banco de dados
+      if ('referrer_name' in insertData) {
+        insertData.quemindicou = insertData.referrer_name;
+        delete insertData.referrer_name;
+      }
+      if ('referrer_phone' in insertData) {
+        insertData.telefonequemindicou = insertData.referrer_phone;
+        delete insertData.referrer_phone;
+      }
+      
+      // Remover campos que não existem na tabela e campos undefined
+      const removedFields: string[] = [];
+      Object.keys(insertData).forEach(key => {
+        if (insertData[key] === undefined || !validFields.includes(key)) {
+          removedFields.push(key);
+          delete insertData[key];
+        }
+      });
+      
+      if (removedFields.length > 0) {
+        console.log('🔍 Campos removidos (não existem na tabela):', removedFields);
+      }
+      
+      console.log('📝 Dados para inserção no banco:', insertData);
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('members')
         .insert([insertData])
         .select()
         .single()
 
-      // Resultado da inserção
-
       if (error) {
-        // Erro na inserção
-        // Detalhes do erro
-        throw error;
+        console.error('❌ Erro ao inserir membro no banco:', error);
+        console.error('   Tipo do erro:', typeof error);
+        console.error('   Erro completo:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+        console.error('   Mensagem:', error.message);
+        
+        // Tentar acessar propriedades adicionais do erro
+        if (error && typeof error === 'object') {
+          const errorObj = error as unknown as Record<string, unknown>;
+          Object.keys(errorObj).forEach(key => {
+            console.error(`   ${key}:`, errorObj[key]);
+          });
+        }
+        
+        // Mensagem de erro mais descritiva
+        let errorMessage = 'Erro ao salvar membro no banco de dados.';
+        if (error.message) {
+          errorMessage += ` ${error.message}`;
+        }
+        
+        // Se o erro for uma string, adicionar diretamente
+        if (typeof error === 'string') {
+          errorMessage = error;
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      // Membro inserido com sucesso
+      console.log('✅ Membro inserido com sucesso:', data && typeof data === 'object' && 'name' in data ? (data as { name: string }).name : 'Membro');
 
       // NÃO atualizar contratos aqui - será feito pelo PublicRegister.tsx
       // (Evita duplicação devido a múltiplas funções incrementando)
@@ -239,10 +366,10 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
 
       return { success: true, data }
     } catch (err) {
-      // Erro geral no addMember
+      console.error('❌ Erro geral no addMember:', err);
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Erro ao adicionar membro' 
+        error: err instanceof Error ? err.message : 'Erro desconhecido ao adicionar membro' 
       }
     }
   }
@@ -252,7 +379,7 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
       // Atualizando contratos do referrer
       
       // Buscar o membro referrer pelo nome
-      const { data: referrerMembers, error: referrerError } = await supabase
+      const { data: referrerMembers, error: referrerError } = await supabaseServerless
         .from('members')
         .select('id, name, contracts_completed')
         .eq('name', referrerName)
@@ -275,7 +402,6 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
       // O contracts_completed deve ser atualizado apenas pela função updateMemberCountersAfterRegistration()
       // no PublicRegister.tsx que conta os amigos reais ativos
       
-      console.log('✅ Membro adicionado sem incremento manual de contratos');
       
     } catch (err) {
       console.warn('Função updateReferrerContracts removida para evitar duplicação');
@@ -284,7 +410,7 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
 
   const updateRanking = async () => {
     try {
-      const { error } = await supabase.rpc('update_complete_ranking')
+      const { error } = await supabaseServerless.rpc('update_complete_ranking')
       if (error) throw error
 
       // Recarregar dados após atualizar ranking
@@ -356,10 +482,9 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
   // Função para soft delete (exclusão lógica) sem dependência de RPC
   const softDeleteMember = async (memberId: string) => {
     try {
-      console.log(`🔧 Iniciando soft delete do membro ${memberId} (SEM cascata)`);
       
       // Buscar dados do membro antes de excluir
-      const { data: memberData, error: memberError } = await supabase
+      const { data: memberData, error: memberError } = await supabaseServerless
         .from('members')
         .select('name, contracts_completed')
         .eq('id', memberId)
@@ -375,10 +500,9 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         throw new Error('Membro já foi excluído ou não existe');
       }
 
-      console.log(`📝 Excluindo membro: ${memberData.name}`);
 
       // 1. Soft delete do membro
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await supabaseServerless
         .from('members')
         .update({ 
           deleted_at: new Date().toISOString(),
@@ -392,13 +516,11 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         throw new Error(`Erro ao excluir membro: ${deleteError.message}`);
       }
 
-      console.log('✅ Membro excluído na tabela members');
 
       // 2. NÃO excluir amigos relacionados - excluir apenas o membro
-      console.log('⚠️ Exclusão de membro SEM cascata - ');
 
       // 3. Buscar auth_users correspondente e excluir links
-      const { data: authUsers, error: authSearchError } = await supabase
+      const { data: authUsers, error: authSearchError } = await supabaseServerless
         .from('auth_users')
         .select('id')
         .eq('name', memberData.name)
@@ -409,7 +531,7 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         const authUserId = authUsers[0].id;
         
         // 3.1. Excluir user_links fisicamente
-        const { error: linksDeleteError } = await supabase
+        const { error: linksDeleteError } = await supabaseServerless
           .from('user_links')
           .delete()
           .eq('user_id', authUserId);
@@ -417,11 +539,10 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         if (linksDeleteError) {
           console.error('❌ Erro ao excluir user_links:', linksDeleteError);
         } else {
-          console.log('✅ Links excluídos fisicamente');
         }
 
         // 3.2. Excluir auth_users fisicamente  
-        const { error: authDeleteError } = await supabase
+        const { error: authDeleteError } = await supabaseServerless
           .from('auth_users')
           .delete()
           .eq('id', authUserId);
@@ -429,10 +550,8 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
         if (authDeleteError) {
           console.error('❌ Erro ao excluir auth_users:', authDeleteError);
         } else {
-          console.log('✅ Usuário excluído de auth_users');
         }
       } else {
-        console.log('⚠️ Nenhum auth_users encontrado para excluir');
       }
 
       // 4. Atualizar ranking após exclusões
@@ -442,7 +561,6 @@ export const useMembers = (referrer?: string, campaign?: string, maxMembers: num
       await fetchMembers();
       await fetchMemberStats();
 
-      console.log('✅ Soft delete concluído com sucesso');
       return { success: true };
 
     } catch (err) {

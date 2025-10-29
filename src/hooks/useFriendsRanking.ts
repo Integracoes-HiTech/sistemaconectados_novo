@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabaseServerless } from '../lib/supabase';
 
 export interface FriendRanking {
   id: string;
@@ -41,7 +41,7 @@ export interface FriendRanking {
   member_sector: string;
 }
 
-export const useFriendsRanking = (campaign?: string) => {
+export const useFriendsRanking = (campaign?: string, campaignId?: string | null) => {
   const [friends, setFriends] = useState<FriendRanking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,18 +53,20 @@ export const useFriendsRanking = (campaign?: string) => {
 
       // Buscando ranking dos amigos diretamente da tabela friends
       // com JOIN para obter dados do membro referrer
-      let query = supabase
+      let query = supabaseServerless
         .from('friends')
         .select(`
           *,
           members!inner(name, instagram, phone, city, sector, campaign)
         `)
         .eq('status', 'Ativo')
-        .is('deleted_at', null)
         .order('contracts_completed', { ascending: false })
         .order('created_at', { ascending: true });
       
-      if (campaign) {
+      // Usar campaign_id se disponível (relacional), caso contrário usar campaign (texto) para compatibilidade
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId);
+      } else if (campaign) {
         query = query.eq('campaign', campaign);
       }
 
@@ -76,8 +78,14 @@ export const useFriendsRanking = (campaign?: string) => {
         return;
       }
 
+      // Garantir que data é um array
+      const dataArray = Array.isArray(data) ? data : (data ? [data] : []);
+      
+      // Filtrar amigos não excluídos no frontend
+      const activeFriends = dataArray.filter(friend => !friend.deleted_at);
+
       // Transformar dados para incluir informações do membro referrer
-      const transformedData = (data || []).map(friend => ({
+      const transformedData = activeFriends.map(friend => ({
         ...friend,
         member_name: friend.members?.name || '',
         member_instagram: friend.members?.instagram || '',
@@ -94,7 +102,7 @@ export const useFriendsRanking = (campaign?: string) => {
     } finally {
       setLoading(false);
     }
-  }, [campaign]);
+  }, [campaign, campaignId]);
 
   const addFriendReferral = async (friendId: string, referralData: {
     name: string;
@@ -108,7 +116,7 @@ export const useFriendsRanking = (campaign?: string) => {
     try {
       // Adicionando referência de amigo
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('friend_referrals')
         .insert([{
           friend_id: friendId,
@@ -147,7 +155,7 @@ export const useFriendsRanking = (campaign?: string) => {
     try {
       // Buscando amigos do membro
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('friends')
         .select(`
           *,
@@ -174,7 +182,7 @@ export const useFriendsRanking = (campaign?: string) => {
     try {
       // Buscando referências do amigo
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('friend_referrals')
         .select('*')
         .eq('friend_id', friendId)
@@ -197,7 +205,7 @@ export const useFriendsRanking = (campaign?: string) => {
     try {
       // Verificando post do Instagram
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('friend_referrals')
         .update({ post_verified: verified })
         .eq('id', referralId)
@@ -225,7 +233,7 @@ export const useFriendsRanking = (campaign?: string) => {
       // Atualizando contador de usuários cadastrados
 
       // Contar referências ativas para este amigo
-      const { count, error: countError } = await supabase
+      const { count, error: countError } = await supabaseServerless
         .from('friend_referrals')
         .select('*', { count: 'exact', head: true })
         .eq('friend_id', friendId)
@@ -237,7 +245,7 @@ export const useFriendsRanking = (campaign?: string) => {
       }
 
       // Atualizar contador na tabela friends
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseServerless
         .from('friends')
         .update({ 
           contracts_completed: count || 0,
@@ -277,41 +285,64 @@ export const useFriendsRanking = (campaign?: string) => {
   // Função para excluir amigo (soft delete)
   const softDeleteFriend = async (friendId: string) => {
     try {
-      // Executando soft delete do amigo
-      
       // Buscar dados do amigo antes de deletar
-      const { data: friendData, error: fetchError } = await supabase
+      const { data: friendData, error: fetchError } = await supabaseServerless
         .from('friends')
-        .select('referrer')
+        .select('referrer, name, member_id')
         .eq('id', friendId)
         .single();
 
       if (fetchError) {
-        // Erro ao buscar dados do amigo
         throw fetchError;
       }
 
+      if (!friendData) {
+        throw new Error('Amigo não encontrado');
+      }
+
+      const friend = friendData as { name: string; referrer: string; member_id: string };
+
       // Atualizar apenas o campo deleted_at
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServerless
         .from('friends')
         .update({ 
-          deleted_at: new Date().toISOString()
+          deleted_at: new Date().toISOString(),
+          status: 'Inativo'
         })
         .eq('id', friendId)
-        .select()
-        .single()
+        .select('*')
 
       if (error) {
-        // Erro no soft delete
         throw error;
       }
 
-      // Soft delete executado com sucesso
+      if (!data || data.length === 0) {
+        // Mesmo sem dados retornados, o update pode ter funcionado
+        // Vamos verificar se o registro foi atualizado
+        const { data: checkData, error: checkError } = await supabaseServerless
+          .from('friends')
+          .select('deleted_at')
+          .eq('id', friendId)
+          .single();
+        
+        if (checkError) {
+          throw new Error('Erro ao verificar update: ' + checkError.message);
+        }
+        
+        const checkRecord = checkData as { deleted_at: string | null };
+        if (!checkRecord?.deleted_at) {
+          throw new Error('Update não foi aplicado corretamente');
+        }
+      }
 
       // Atualizar contadores do membro referrer
-      if (friendData?.referrer) {
-        // Atualizando contadores após exclusão do amigo
-        await updateMemberCountersAfterDelete(friendData.referrer);
+      if (friend?.member_id) {
+        try {
+          // Atualizando contadores após exclusão do amigo
+          await updateMemberCountersAfterDelete(friend.member_id);
+        } catch (updateError) {
+          // Continuar mesmo se falhar a atualização dos contadores
+        }
       }
 
       // Recarregar dados após exclusão
@@ -319,7 +350,6 @@ export const useFriendsRanking = (campaign?: string) => {
 
       return { success: true, data };
     } catch (err) {
-      // Erro geral no softDeleteFriend
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Erro ao excluir amigo' 
@@ -328,68 +358,59 @@ export const useFriendsRanking = (campaign?: string) => {
   }
 
   // Função para atualizar contadores do membro após exclusão de amigo
-  const updateMemberCountersAfterDelete = async (referrerName: string) => {
+  const updateMemberCountersAfterDelete = async (memberId: string) => {
     try {
-      // Atualizando contadores após exclusão
-      
-      // Buscar o membro referrer
-      const { data: referrerMembers, error: referrerError } = await supabase
+      // Buscar o membro pelo ID
+      const { data: referrerMember, error: referrerError } = await supabaseServerless
         .from('members')
-        .select('id, name, contracts_completed')
-        .eq('name', referrerName)
+        .select('id, name, contracts_completed, deleted_at')
+        .eq('id', memberId)
         .eq('status', 'Ativo')
-        .is('deleted_at', null);
-
-      const referrerMember = referrerMembers?.[0];
+        .is('deleted_at', null)
+        .single();
 
       if (referrerError) {
-        // Erro ao buscar referrer
         return;
       }
 
       if (!referrerMember) {
-        // Referrer não encontrado
         return;
       }
 
       // Contar amigos ativos cadastrados por este membro
-      const { data: friendsData, error: friendsError } = await supabase
+      // Usar member_id em vez de referrer name
+      const { data: friendsData, error: friendsError } = await supabaseServerless
         .from('friends')
-        .select('id')
-        .eq('referrer', referrerName)
-        .eq('status', 'Ativo')
-        .is('deleted_at', null);
+        .select('id, deleted_at')
+        .eq('member_id', memberId)
+        .eq('status', 'Ativo');
 
       if (friendsError) {
-        // Erro ao contar amigos
         return;
       }
 
-      const friendsCount = friendsData?.length || 0;
-      const currentContracts = referrerMember.contracts_completed;
-
-      // Contratos atuais e amigos ativos
+      // Garantir que friendsData é um array
+      const friendsArray = Array.isArray(friendsData) ? friendsData : [];
+      
+      // Filtrar amigos não excluídos no frontend
+      const activeFriends = friendsArray.filter((f: { deleted_at: string | null }) => !f.deleted_at);
+      const friendsCount = activeFriends.length;
 
       // Atualizar contracts_completed
-      // Atualizando contratos após exclusão
-      
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseServerless
         .from('members')
         .update({ 
           contracts_completed: friendsCount,
           updated_at: new Date().toISOString()
         })
-        .eq('id', referrerMember.id);
+        .eq('id', (referrerMember as { id: string }).id);
 
       if (updateError) {
-        // Erro ao atualizar contratos do membro
         return;
       }
 
       // Atualizar ranking e status
-      await updateMemberRankingAndStatus(referrerMember.id, friendsCount);
-      
-      // Contadores do membro atualizados após exclusão
+      await updateMemberRankingAndStatus((referrerMember as { id: string }).id, friendsCount);
 
     } catch (err) {
       // Erro ao atualizar contadores após exclusão
@@ -410,7 +431,7 @@ export const useFriendsRanking = (campaign?: string) => {
       }
 
       // Atualizar status do membro
-      const { error: statusError } = await supabase
+      const { error: statusError } = await supabaseServerless
         .from('members')
         .update({ 
           ranking_status: rankingStatus,
@@ -436,7 +457,7 @@ export const useFriendsRanking = (campaign?: string) => {
       // Atualizando ranking de todos os membros
       
       // Usar função RPC do banco que já tem sistema automático por campanha
-      const { error } = await supabase.rpc('update_complete_ranking');
+      const { error } = await supabaseServerless.rpc('update_complete_ranking');
       
       if (error) {
         console.warn('Erro ao executar ranking automático:', error);

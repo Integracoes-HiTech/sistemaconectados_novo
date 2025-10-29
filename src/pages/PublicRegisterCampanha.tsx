@@ -7,7 +7,7 @@ import { Logo } from "@/components/Logo";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Tag, Palette, CheckCircle, AlertCircle, Package } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabaseServerless } from "@/lib/supabase";
 import {
   Select,
   SelectContent,
@@ -56,7 +56,7 @@ export default function PublicRegisterCampanha() {
   useEffect(() => {
     const fetchPlanos = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseServerless
           .from('planos_precos')
           .select('id, nome_plano, amount')
           .eq('is_active', true)
@@ -178,7 +178,7 @@ export default function PublicRegisterCampanha() {
         // Buscar o nome do plano selecionado
         const planoSelecionado = planos.find(p => p.id === formData.planoId);
         
-        const { data: updatedCampaign, error: updateError } = await supabase
+        const { error: updateError } = await supabaseServerless
           .from('campaigns')
           .update({
             name: formData.name,
@@ -188,9 +188,7 @@ export default function PublicRegisterCampanha() {
             secondary_color: formData.secondaryColor,
             updated_at: new Date().toISOString()
           })
-          .eq('id', campaignData.id)
-          .select()
-          .single();
+          .eq('id', campaignData.id);
 
         if (updateError) {
           throw new Error(updateError.message || 'Erro ao atualizar campanha');
@@ -209,11 +207,15 @@ export default function PublicRegisterCampanha() {
       } else {
         // MODO DE CRIAÇÃO - Criar nova campanha
         // Verificar se o código da campanha já existe
-        const { data: existingCampaign, error: checkError } = await supabase
+        const { data: existingCampaignData, error: checkError } = await supabaseServerless
           .from('campaigns')
           .select('id')
-          .eq('code', formData.code)
-          .maybeSingle();
+          .eq('code', formData.code);
+        
+        // maybeSingle não existe, então pegamos o primeiro resultado
+        const existingCampaign = Array.isArray(existingCampaignData) && existingCampaignData.length > 0 
+          ? existingCampaignData[0] 
+          : null;
 
         if (checkError && checkError.code !== 'PGRST116') {
           throw checkError;
@@ -236,7 +238,7 @@ export default function PublicRegisterCampanha() {
         const displayName = formData.name.split(' ')[0];
 
         // PASSO 2: Criar o admin na tabela auth_users (com permissões completas)
-        const { data: newAdmin, error: adminError } = await supabase
+        const { data: newAdminData, error: adminError } = await supabaseServerless
           .from('auth_users')
           .insert([
             {
@@ -246,12 +248,12 @@ export default function PublicRegisterCampanha() {
               role: 'Administrador',  // Role completo (todas as permissões)
               campaign: formData.code,
               full_name: `Admin ${formData.name} - Administrador`,
-              display_name: displayName,
               is_active: true
             }
           ])
-          .select()
-          .single();
+          .select();
+        
+        const newAdmin = Array.isArray(newAdminData) && newAdminData.length > 0 ? newAdminData[0] : null;
 
         if (adminError) {
           throw new Error(`Erro ao criar admin: ${adminError.message}`);
@@ -261,7 +263,7 @@ export default function PublicRegisterCampanha() {
         // Buscar o nome do plano selecionado
         const planoSelecionado = planos.find(p => p.id === formData.planoId);
         
-        const { data: newCampaign, error: insertError } = await supabase
+        const { data: newCampaignData, error: insertError } = await supabaseServerless
           .from('campaigns')
           .insert([
             {
@@ -274,12 +276,15 @@ export default function PublicRegisterCampanha() {
               is_active: true
             }
           ])
-          .select()
-          .single();
+          .select();
+        
+        const newCampaign = Array.isArray(newCampaignData) && newCampaignData.length > 0 ? newCampaignData[0] : null;
 
         if (insertError) {
           // ROLLBACK: Deletar o admin se a campanha falhar
-          await supabase.from('auth_users').delete().eq('id', newAdmin.id);
+          if (newAdmin?.id) {
+            await supabaseServerless.from('auth_users').delete().eq('id', newAdmin.id);
+          }
           throw new Error(`Erro ao criar campanha: ${insertError.message}`);
         }
         
