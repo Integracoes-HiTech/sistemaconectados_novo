@@ -6,7 +6,7 @@ import cors from 'cors'
 import { createClient } from '@supabase/supabase-js'
 
 const app = express()
-const PORT = 3000
+const PORT = process.env.PORT || 3000
 
 // Configurar CORS
 app.use(cors({
@@ -25,6 +25,14 @@ const supabaseUrl = 'https://zveysullpsdopcwsncai.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y'
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Handle OPTIONS requests first
+app.options('/api/x7k9m2p4', (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://conectadosdigital.com.br');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.status(204).send();
+});
 
 // Endpoint principal
 app.post('/api/x7k9m2p4', async (req, res) => {
