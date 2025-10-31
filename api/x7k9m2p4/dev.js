@@ -15,8 +15,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
-// Suporte a requisições preflight (OPTIONS)
-app.options('*', cors())
+// Suporte a requisições preflight (OPTIONS) com mesma configuração
+app.options('*', cors({
+  origin: 'https://conectadosdigital.com.br',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
 
 app.use(express.json())
 
@@ -25,14 +29,6 @@ const supabaseUrl = 'https://zveysullpsdopcwsncai.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y'
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Handle OPTIONS requests first
-app.options('/api/x7k9m2p4', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://conectadosdigital.com.br');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.status(204).send();
-});
 
 // Endpoint principal
 app.post('/api/x7k9m2p4', async (req, res) => {
