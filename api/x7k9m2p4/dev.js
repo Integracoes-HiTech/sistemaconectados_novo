@@ -8,11 +8,12 @@ import { createClient } from '@supabase/supabase-js'
 const app = express()
 const PORT = 3000
 
-// Configurar CORS
+// Configurar CORS - Permitir todos os domínios para facilitar testes
 app.use(cors({
-  origin: 'https://conectadosdigital.com.br',
+  origin: true, // Permite qualquer origem
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
 }))
 
 // Suporte a requisições preflight (OPTIONS)
