@@ -1,7 +1,10 @@
 // src/lib/k9m7x2.ts
 // Cliente que usa API intermediária
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || __API_URL__ || 'https://igck04s844wc0gook4k8gksg.148.230.73.244.sslip.io/api/x7k9m2p4'
+// Em desenvolvimento, usa localhost. Em produção, usa variáveis de ambiente ou URL padrão
+const API_BASE_URL = import.meta.env.DEV 
+  ? 'http://localhost:8080/api/x7k9m2p4'
+  : (import.meta.env.VITE_API_URL || __API_URL__ || 'https://igck04s844wc0gook4k8gksg.148.230.73.244.sslip.io/api/x7k9m2p4')
 
 interface RequestParams {
   table?: string
