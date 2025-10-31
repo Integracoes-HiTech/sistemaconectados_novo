@@ -1,0 +1,16 @@
+{
+  "name": "sistemaconectados-api",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "x7k9m2p4/dev.js",
+  "scripts": {
+    "start": "node x7k9m2p4/dev.js",
+    "dev": "node x7k9m2p4/dev.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.76.1",
+    "express": "^5.1.0",
+    "cors": "^2.8.5"
+  }
+}
+

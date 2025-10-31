@@ -345,35 +345,23 @@ class SupabaseServerlessClient {
         }
       }),
       update: (data: Record<string, unknown>) => ({
-        eq: (column: string, value: unknown) => ({
-          select: (columns: string) => ({
-            single: async (): Promise<SupabaseResponse> => {
-              const filters: Record<string, unknown> = {}
-              filters[column] = value
-              
-              return self.update(table, data, filters, columns)
-            }
-          }),
-          select: async (columns: string): Promise<SupabaseResponse> => {
-            const filters: Record<string, unknown> = {}
-            filters[column] = value
-            
-            return self.update(table, data, filters, columns)
-          },
-          then: async (callback?: (result: SupabaseResponse) => void): Promise<SupabaseResponse> => {
-            const filters: Record<string, unknown> = {}
-            filters[column] = value
-            
-            const result = await self.makeRequest('update', {
-              table,
-              data,
-              filters
+        eq: (column: string, value: unknown) => {
+          const filters: Record<string, unknown> = {}
+          filters[column] = value
+          
+          return {
+            select: (columns: string) => ({
+              single: async (): Promise<SupabaseResponse> => {
+                return self.update(table, data, filters, columns)
+              },
+              then: async (callback: (result: SupabaseResponse) => void): Promise<SupabaseResponse> => {
+                const result = await self.update(table, data, filters, columns)
+                callback(result)
+                return result
+              }
             })
-            
-            if (callback) callback(result)
-            return result
           }
-        }),
+        },
         in: (column: string, values: unknown[]) => ({
           select: async (columns: string): Promise<SupabaseResponse> => {
             const filters: Record<string, unknown> = {}
@@ -381,10 +369,7 @@ class SupabaseServerlessClient {
             
             return self.update(table, data, filters, columns)
           }
-        }),
-        select: async (columns: string): Promise<SupabaseResponse> => {
-          return self.update(table, data, {}, columns)
-        }
+        })
       }),
       delete: () => ({
         eq: (column: string, value: unknown) => ({
