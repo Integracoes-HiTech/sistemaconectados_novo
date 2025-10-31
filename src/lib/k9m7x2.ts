@@ -24,11 +24,15 @@ interface SupabaseResponse<T = unknown> {
 class SupabaseServerlessClient {
   private async makeRequest<T = unknown>(operation: string, params: RequestParams): Promise<SupabaseResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}?data=${encodeURIComponent(JSON.stringify({ operation, ...params }))}`, {
-        method: 'GET',
+      const response = await fetch(API_BASE_URL, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        body: JSON.stringify({
+          operation,
+          ...params
+        })
       })
 
       const result = await response.json()

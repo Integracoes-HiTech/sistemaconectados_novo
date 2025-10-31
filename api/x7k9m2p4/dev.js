@@ -30,18 +30,15 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Endpoint principal - GET
-app.get('/api/x7k9m2p4', async (req, res) => {
+// Endpoint GET para testes
+app.get('/api/x7k9m2p4', (req, res) => {
+  res.json({ success: true, message: 'API funcionando!' })
+})
+
+// Endpoint principal - POST
+app.post('/api/x7k9m2p4', async (req, res) => {
   try {
-    // Se não tem parâmetros, retorna mensagem de teste
-    if (!req.query.data) {
-      res.json({ success: true, message: 'API funcionando!' })
-      return
-    }
-    
-    // Parse dos dados da query string
-    const parsedData = JSON.parse(decodeURIComponent(req.query.data))
-    const { table, operation, data, filters, select, order, limit, offset, functionName, params } = parsedData
+    const { table, operation, data, filters, select, order, limit, offset, functionName, params } = req.body
 
     let result
 
