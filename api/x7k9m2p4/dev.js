@@ -8,12 +8,11 @@ import { createClient } from '@supabase/supabase-js'
 const app = express()
 const PORT = 3000
 
-// Configurar CORS - Permitir todos os domínios para facilitar testes
+// Configurar CORS - Permitir todos para facilitar testes
 app.use(cors({
-  origin: true, // Permite qualquer origem
+  origin: '*', // Permitir todos os domínios
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
 // Suporte a requisições preflight (OPTIONS)
