@@ -9,7 +9,16 @@ const app = express()
 const PORT = 3000
 
 // Configurar CORS
-app.use(cors())
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
+}))
+
+// Handler OPTIONS para preflight
+app.options('*', cors())
+
 app.use(express.json())
 
 // Configurar Supabase
