@@ -44,5 +44,6 @@ export default defineConfig(({ mode }) => ({
   define: {
     __SUPABASE_URL__: JSON.stringify(process.env.VITE_SUPABASE_URL || 'https://zveysullpsdopcwsncai.supabase.co'),
     __SUPABASE_KEY__: JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2ZXlzdWxscHNkb3Bjd3NuY2FpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzA0NTIsImV4cCI6MjA3NDc0NjQ1Mn0.n-jGNo4bvVlvu9ULHTxktLqjyEtanLTtiQex6UvPy6Y'),
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'https://igck04s844wc0gook4k8gksg.148.230.73.244.sslip.io/api/x7k9m2p4'),
   },
 }));
