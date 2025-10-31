@@ -38,6 +38,14 @@ class SupabaseServerlessClient {
         })
       })
 
+      // Checar status antes de tentar fazer JSON parse
+      if (!response.ok) {
+        const text = await response.text()
+        console.error('Erro na requisição:', response.status, response.statusText)
+        console.error('Resposta:', text)
+        throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`)
+      }
+
       const result = await response.json()
 
       if (!result.success) {
