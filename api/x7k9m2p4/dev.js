@@ -10,13 +10,12 @@ const PORT = 3000
 
 // Configurar CORS
 app.use(cors({
-  origin: '*',
+  origin: 'https://conectadosdigital.com.br',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
-// Handler OPTIONS para preflight
+// Suporte a requisições preflight (OPTIONS)
 app.options('*', cors())
 
 app.use(express.json())
