@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste API - Sistemas Conectados</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .info {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            flex: 1;
+            min-width: 150px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        pre {
+            background: rgba(0,0,0,0.05);
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste de Comunicação com API</h1>
+        
+        <div class="info">
+            <strong>URL:</strong> https://igck04s844wc0gook4k8gksg.148.230.73.244.sslip.io/api/x7k9m2p4
+        </div>
+
+        <div class="button-container">
+            <button onclick="testConnection()">Testar Conexão</button>
+            <button onclick="testSelect()">Testar SELECT</button>
+            <button onclick="testAuth()">Testar AUTH</button>
+        </div>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://igck04s844wc0gook4k8gksg.148.230.73.244.sslip.io/api/x7k9m2p4';
+
+        function showResult(message, isError = false) {
+            const result = document.getElementById('result');
+            result.className = `result ${isError ? 'error' : 'success'}`;
+            result.innerHTML = message;
+            result.style.display = 'block';
+        }
+
+        function testConnection() {
+            showResult('<div class="loading"></div> Testando conexão...');
+            
+            fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    operation: 'select',
+                    table: 'auth_users',
+                    select: 'count'
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                showResult(`
+                    <h3>✅ Conexão OK!</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `);
+            })
+            .catch(error => {
+                showResult(`
+                    <h3>❌ Erro na Conexão</h3>
+                    <pre>${error.message}</pre>
+                `, true);
+            });
+        }
+
+        function testSelect() {
+            showResult('<div class="loading"></div> Testando SELECT...');
+            
+            fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    operation: 'select',
+                    table: 'auth_users',
+                    select: '*',
+                    limit: 5
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const count = Array.isArray(data.data) ? data.data.length : 0;
+                showResult(`
+                    <h3>✅ SELECT OK!</h3>
+                    <p><strong>Registros encontrados:</strong> ${count}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `);
+            })
+            .catch(error => {
+                showResult(`
+                    <h3>❌ Erro no SELECT</h3>
+                    <pre>${error.message}</pre>
+                `, true);
+            });
+        }
+
+        function testAuth() {
+            showResult('<div class="loading"></div> Testando AUTH...');
+            
+            fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    operation: 'auth',
+                    data: {
+                        username: 'test',
+                        password: 'test'
+                    }
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showResult(`
+                        <h3>✅ AUTH OK!</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `);
+                } else {
+                    showResult(`
+                        <h3>⚠️ AUTH Retornou Erro (Esperado)</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `, false);
+                }
+            })
+            .catch(error => {
+                showResult(`
+                    <h3>❌ Erro no AUTH</h3>
+                    <pre>${error.message}</pre>
+                `, true);
+            });
+        }
+    </script>
+</body>
+</html>
+
