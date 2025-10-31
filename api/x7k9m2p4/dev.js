@@ -36,7 +36,7 @@ app.get('/api/x7k9m2p4', (req, res) => {
 })
 
 // Endpoint principal - POST
-app.post('/api/x7k9m2p4', async (req, res) => {
+app.get('/api/x7k9m2p4', async (req, res) => {
   try {
     const { table, operation, data, filters, select, order, limit, offset, functionName, params } = req.body
 
