@@ -10,14 +10,14 @@ const PORT = process.env.PORT || 8080
 
 // Configurar CORS
 app.use(cors({
-  origin: 'https://conectadosdigital.com.br',
+  origin: '*', // Permitir todos os domínios
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
 // Suporte a requisições preflight (OPTIONS)
 app.options('/api/x7k9m2p4', cors({
-  origin: 'https://conectadosdigital.com.br',
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
